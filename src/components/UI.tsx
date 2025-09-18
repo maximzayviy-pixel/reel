@@ -2,7 +2,6 @@
 import React from 'react';
 
 type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { className?: string };
-
 export function Button({ className = '', children, ...rest }: BtnProps) {
   return (
     <button
@@ -12,5 +11,18 @@ export function Button({ className = '', children, ...rest }: BtnProps) {
     >
       {children}
     </button>
+  );
+}
+
+// Minimal Card wrapper used by older pages (lk/scan/QRScanner).
+// Provides same rounded container styling as other "card" blocks.
+export function Card({ className = '', children, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      {...rest}
+      className={`card rounded-2xl bg-white shadow-sm p-4 ${className}`}
+    >
+      {children}
+    </div>
   );
 }
