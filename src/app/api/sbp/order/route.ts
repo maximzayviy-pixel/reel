@@ -1,8 +1,8 @@
 export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDB } from '../../../../../lib/firebaseAdmin';
-import { getUserIdFromRequest } from '../../../../../lib/telegram';
-import { sendPhoto, sendMessage } from '../../../../../lib/notify';
+import { getAdminDB } from '../';
+import { getUserIdFromRequest } from '../';
+import { sendPhoto, sendMessage } from '../';
 
 function getRates() {
   const ton = Number(process.env.TON_RATE_RUB || 350);
