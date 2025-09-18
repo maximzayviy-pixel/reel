@@ -1,120 +1,62 @@
-'use client';
-export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
-import Tabs from '../../components/Tabs';
-import { Button } from '../../components/UI';
-import { useTG } from '../../context/UserContext';
+'use client';
+import { useSearchParams } from 'next/navigation';
+import { useState } from 'react';
 
 export default function TopupPage(){
-  const { initData, isMiniApp } = useTG();
-  const tg = (globalThis as any)?.Telegram?.WebApp;
-  const [stars, setStars] = useState<number>(50);
-  const [tonRub, setTonRub] = useState<number>(1000);
-  const [error, setError] = useState('');
-  const [busyStars, setBusyStars] = useState(false);
-  const [busyTon, setBusyTon] = useState(false);
-  const [starsLink, setStarsLink] = useState<string>('');
-  const [tonLink, setTonLink] = useState<string>('');
+  const sp = useSearchParams();
+  const defType = sp.get('type') || 'stars';
+  const [type, setType] = useState<'stars'|'ton'>(defType as any);
+  const [amount, setAmount] = useState<number>(50);
 
-  useEffect(()=>{ try{ tg?.expand?.(); }catch{} },[tg]);
-
-  const openLink = (url: string) => {
-    try { if (tg?.openTelegramLink) { tg.openTelegramLink(url); return; } } catch {}
-    try { if (tg?.openLink) { tg.openLink(url); return; } } catch {}
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
-  const topupStars = async () => {
-    setError('');
-    setStarsLink('');
-    try {
-      const res = await fetch('/api/topup/stars', {
-        method:'POST',
-        headers: {
-          'Content-Type':'application/json',
-          ...(initData ? {'x-telegram-init-data': initData} : {})
-        },
-        body: JSON.stringify({ stars })
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'Ошибка');
-      setStarsLink(j.link);
-    } catch (e:any) {
-      setError(e?.message || 'Ошибка');
-    }
-  };
-
-  const topupTon = async () => {
-    setError('');
-    setTonLink('');
-    try {
-      const res = await fetch('/api/topup/ton', {
-        method:'POST',
-        headers: {
-          'Content-Type':'application/json',
-          ...(initData ? {'x-telegram-init-data': initData} : {})
-        },
-        body: JSON.stringify({ rub: tonRub })
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'Ошибка');
-      setTonLink(j.pay_url);
-    } catch (e:any) {
-      setError(e?.message || 'Ошибка');
+  const create = async ()=>{
+    if (type==='stars'){
+      // открываем платёж звёздами (client-side: уже реализовано у тебя; оставляю вызов)
+      const res = await fetch('/api/topup/stars', { method:'POST', body: JSON.stringify({ amount }) });
+      const data = await res.json().catch(()=>null);
+      if (data?.ok && data?.invoiceLink){
+        // если Telegram не открыл модалку сам — покажем ссылку
+        window.location.href = data.invoiceLink;
+      }
+    } else {
+      const res = await fetch('/api/topup/ton', { method:'POST', body: JSON.stringify({ rub: amount }) });
+      const data = await res.json().catch(()=>null);
+      if (data?.ok && data?.payUrl){
+        window.location.href = data.payUrl;
+      }
     }
   };
 
   return (
-    <>
-      <h1 className="text-lg font-semibold mb-2">Пополнение</h1>
-      {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
+    <main className="p-4 max-w-screen-sm mx-auto">
+      <h1 className="text-xl font-semibold mb-3">Пополнение</h1>
 
-      {!isMiniApp && (
-        <div className="text-xs text-amber-700 bg-amber-100 rounded-xl px-3 py-2 mb-2">
-          Похоже, открыто в браузере. Оплатить звёздами можно только внутри Telegram.
-        </div>
-      )}
-
-      <div className="card">
-        <div className="font-semibold mb-2">Звёзды Telegram</div>
-        <div className="flex gap-2 items-center">
-          <input type="number" min={1} value={stars} onChange={e=>setStars(parseInt(e.target.value||'0'))} className="border rounded-xl p-2 w-28" />
-          <div className="text-sm opacity-70">⭐</div>
-        </div>
-        <div className="mt-3">
-          <Button onClick={topupStars} disabled={busyStars}>
-            {busyStars?'Создаём счёт…':'Создать счёт'}
-          </Button>
-          {starsLink && (
-            <div className="mt-2 flex items-center gap-2">
-              <Button onClick={()=>openLink(starsLink)}>Оплатить звёздами</Button>
-              <a className="text-xs underline break-all" href={starsLink} target="_blank" rel="noreferrer">Ссылка на оплату</a>
-            </div>
-          )}
-        </div>
+      <div className="inline-flex overflow-hidden rounded-xl border border-white/10 mb-3">
+        <button onClick={()=>setType('stars')} className={"px-4 py-2 "+(type==='stars'?'bg-white/10':'')}>
+          Звёзды
+        </button>
+        <button onClick={()=>setType('ton')} className={"px-4 py-2 "+(type==='ton'?'bg-white/10':'')}>
+          TON
+        </button>
       </div>
 
-      <div className="card mt-4">
-        <div className="font-semibold mb-2">TON через CryptoCloud</div>
-        <div className="flex gap-2 items-center">
-          <input type="number" min={1} value={tonRub} onChange={e=>setTonRub(parseInt(e.target.value||'0'))} className="border rounded-xl p-2 w-28" />
-          <div className="text-sm opacity-70">₽</div>
-        </div>
-        <div className="mt-3">
-          <Button onClick={topupTon} disabled={busyTon}>
-            {busyTon?'Создаём счёт…':'Создать счёт'}
-          </Button>
-          {tonLink && (
-            <div className="mt-2 flex items-center gap-2">
-              <Button onClick={()=>openLink(tonLink)}>Оплатить TON</Button>
-              <a className="text-xs underline break-all" href={tonLink} target="_blank" rel="noreferrer">Ссылка на оплату</a>
-            </div>
-          )}
-        </div>
-      </div>
+      <label className="block text-sm opacity-80 mb-1">
+        Сумма в {type==='stars' ? 'звёздах' : 'рублях'}
+      </label>
+      <input
+        type="number"
+        value={amount}
+        onChange={e=>setAmount(Number(e.target.value||0))}
+        className="w-full rounded-xl border border-white/10 bg-black/20 p-3 mb-4 outline-none"
+      />
 
-      <Tabs/>
-    </>
+      <button onClick={create} className="w-full rounded-2xl p-4 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-semibold shadow-lg active:translate-y-px">
+        Создать счёт
+      </button>
+
+      <p className="text-xs opacity-70 mt-3">
+        Для звёзд оплата происходит внутри Telegram. Для TON откроется платёжная страница (CryptoCloud/др.).
+      </p>
+    </main>
   );
 }
