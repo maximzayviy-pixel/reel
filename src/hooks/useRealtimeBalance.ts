@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebaseClient";
+import { db } from "../lib/firebaseClient"; // <-- относительный импорт
 
 export function useRealtimeBalance(userId?: string) {
   const [stars, setStars] = useState<number>(0);
