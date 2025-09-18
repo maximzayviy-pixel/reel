@@ -1,24 +1,14 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Tabs from '../../components/Tabs';
 import { Button } from '../../components/UI';
 import { useTG } from '../../context/UserContext';
-
-async function fetchBalance(initData?: string){
-  const res = await fetch('/api/me/balance', {
-    method: 'GET',
-    headers: initData ? {'x-telegram-init-data': initData} : {},
-    cache: 'no-store'
-  });
-  if (!res.ok) throw new Error('balance fetch failed');
-  const j = await res.json();
-  return j?.balances || { stars: 0, ton: 0 };
-}
+import { fetchBalance } from '../../lib/fetchBalance';
 
 export default function TopupPage(){
-  const { initData, loading } = useTG();
+  const { initData, loading, refreshBalances } = useTG();
   const tg = (globalThis as any)?.Telegram?.WebApp;
   const [stars, setStars] = useState<number>(50);
   const [tonRub, setTonRub] = useState<number>(1000);
@@ -60,7 +50,7 @@ export default function TopupPage(){
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
       setStarsLink(j.link);
-      setStatus('Счёт готов. Нажми «Оплатить» и не закрывай Телеграм до подтверждения.');
+      setStatus('Счёт готов. Нажми «Оплатить звёздами» и не закрывай Telegram.');
     } catch (e:any) {
       setError(e?.message || 'Ошибка');
     } finally {
@@ -72,7 +62,6 @@ export default function TopupPage(){
     if (!starsLink) return;
     setStatus('Ожидаем подтверждение оплаты…');
     openLink(starsLink);
-    // Start short-lived polling: 10 tries * 3s = 30s
     if (pollRef.current) clearInterval(pollRef.current);
     let tries = 0;
     pollRef.current = setInterval(async () => {
@@ -83,6 +72,7 @@ export default function TopupPage(){
           setStatus('Оплата зафиксирована ✅ Баланс обновлён.');
           clearInterval(pollRef.current);
           pollRef.current = null;
+          refreshBalances();
         } else if (tries >= 10) {
           setStatus('Долго нет ответа. Если платёж прошёл — обнови баланс вручную.');
           clearInterval(pollRef.current);
@@ -91,29 +81,6 @@ export default function TopupPage(){
       } catch {}
     }, 3000);
   };
-
-  const refreshNow = async () => {
-    setStatus('Обновляем баланс…');
-    try {
-      const b = await fetchBalance(initData || undefined);
-      if (lastStarsBefore !== null && b.stars > lastStarsBefore) setStatus('Оплата зафиксирована ✅ Баланс обновлён.');
-      else setStatus('Баланс обновлён.');
-    } catch { setStatus('Не удалось обновить.'); }
-  };
-
-  useEffect(() => {
-    const handler = (d:any) => {
-      if (!d) return;
-      if (d.status === 'paid') {
-        setStatus('Оплата подтверждена. Обновляем баланс…');
-        refreshNow();
-      } else if (d.status) {
-        setStatus(`Статус: ${d.status}`);
-      }
-    };
-    try{ tg?.onEvent?.('invoiceClosed', handler); }catch{}
-    return () => { try{ tg?.offEvent?.('invoiceClosed', handler); }catch{} };
-  }, [tg]);
 
   const topupTon = async () => {
     setError('');
@@ -136,6 +103,29 @@ export default function TopupPage(){
       setBusyTon(false);
     }
   };
+
+  const refreshNow = async () => {
+    setStatus('Обновляем баланс…');
+    try {
+      await refreshBalances();
+      setStatus('Баланс обновлён.');
+    } catch { setStatus('Не удалось обновить.'); }
+  };
+
+  // subscribe to invoiceClosed just in case
+  useEffect(() => {
+    const handler = (d:any) => {
+      if (!d) return;
+      if (d.status === 'paid') {
+        setStatus('Оплата подтверждена. Обновляем баланс…');
+        refreshNow();
+      } else if (d.status) {
+        setStatus(`Статус: ${d.status}`);
+      }
+    };
+    try{ tg?.onEvent?.('invoiceClosed', handler); }catch{}
+    return () => { try{ tg?.offEvent?.('invoiceClosed', handler); }catch{} };
+  }, [tg]);
 
   return (
     <>

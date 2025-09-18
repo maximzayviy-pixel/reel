@@ -2,15 +2,29 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { fetchBalance } from '../lib/fetchBalance';
 
-type TGUser = { id?: string; username?: string; first_name?: string; last_name?: string; photo_url?: string; };
+export type TGUser = {
+  id?: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  photo_url?: string;
+  verified?: boolean;
+  banned?: boolean;
+};
+
 type Ctx = {
   user: TGUser | null;
   initData: string | null;
   loading: boolean;
+  setUser: (u: TGUser | null) => void;
   balances: { stars: number; ton: number };
   refreshBalances: () => Promise<void>;
 };
-const C = createContext<Ctx>({ user: null, initData: null, loading: true, balances:{stars:0, ton:0}, refreshBalances: async()=>{} });
+
+const C = createContext<Ctx>({
+  user: null, initData: null, loading: true, setUser: ()=>{},
+  balances: { stars: 0, ton: 0 }, refreshBalances: async () => {}
+});
 
 export function UserProvider({ children }: { children: React.ReactNode }){
   const tg = (globalThis as any)?.Telegram?.WebApp;
@@ -23,8 +37,14 @@ export function UserProvider({ children }: { children: React.ReactNode }){
     try{
       const init = tg?.initData || null;
       setInitData(init || null);
-      const pdata = tg?.initDataUnsafe?.user || null;
-      setUser(pdata ? { id: String(pdata.id), username: pdata.username, first_name: pdata.first_name, last_name: pdata.last_name, photo_url: pdata.photo_url } : null);
+      const u = tg?.initDataUnsafe?.user || null;
+      setUser(u ? {
+        id: String(u.id),
+        username: u.username,
+        first_name: u.first_name,
+        last_name: u.last_name,
+        photo_url: u.photo_url,
+      } : null);
     }catch{}
     setLoading(false);
   }, [tg]);
@@ -38,7 +58,7 @@ export function UserProvider({ children }: { children: React.ReactNode }){
 
   useEffect(()=>{ if (initData) refreshBalances(); }, [initData]);
 
-  const value = useMemo(()=>({ user, initData, loading, balances, refreshBalances }), [user, initData, loading, balances]);
+  const value = useMemo(()=>({ user, initData, loading, setUser, balances, refreshBalances }), [user, initData, loading, balances]);
 
   return <C.Provider value={value}>{children}</C.Provider>;
 }
