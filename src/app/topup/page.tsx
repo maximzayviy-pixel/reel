@@ -1,112 +1,127 @@
 'use client';
-import React, { useMemo, useState } from 'react';
+
+import React, { useState } from 'react';
+import { getInitData, getUserIdUnsafe } from '@/lib/tg';
+
+function GradientButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      {...props}
+      className={
+        'w-full rounded-2xl py-4 px-5 text-white font-semibold shadow ' +
+        'bg-gradient-to-r from-sky-500 to-blue-600 active:opacity-90 disabled:opacity-50'
+      }
+    />
+  );
+}
 
 export default function TopupPage() {
   const [tab, setTab] = useState<'stars' | 'ton'>('stars');
-  const [amount, setAmount] = useState<number>(50);
-  const [error, setError] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [stars, setStars] = useState('50');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const uid = getUserIdUnsafe();
 
-  const tg = (globalThis as any)?.Telegram?.WebApp;
+  const back = () => {
+    const tg = (window as any)?.Telegram?.WebApp;
+    tg?.BackButton?.show();
+    tg?.BackButton?.onClick(() => history.back());
+    history.back();
+  };
 
   async function createStarsInvoice() {
-    setError(''); setLoading(true);
+    setErr(null); setLoading(true);
     try {
-      const init = tg?.initData || '';
+      const initData = getInitData();
       const res = await fetch('/api/topup/stars', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-telegram-init-data': init,
+          'x-telegram-init-data': initData,
         },
-        body: JSON.stringify({ amount })
+        body: JSON.stringify({ amount: Number(stars) || 0 }),
       });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || 'server_error');
-      const link: string = json.result;
-      if (tg?.openInvoice) {
-        tg.openInvoice(link, (status: any) => {
-          // status: paid / cancelled / failed
-          if (status === 'paid') tg?.showAlert?.('Оплачено!');
-        });
-      } else {
-        window.location.href = link;
-      }
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'createStars failed');
+
+      const tg = (window as any)?.Telegram?.WebApp;
+      tg?.openInvoice?.(data.result);
+      if (!tg?.openInvoice) window.open(data.result, '_blank');
     } catch (e: any) {
-      setError(e.message || 'error');
+      setErr(e.message || 'unknown');
     } finally {
       setLoading(false);
     }
   }
 
   async function createTonInvoice() {
-    setError(''); setLoading(true);
+    setErr(null); setLoading(true);
     try {
-      const init = tg?.initData || '';
+      const initData = getInitData();
       const res = await fetch('/api/topup/ton', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-telegram-init-data': init,
+          'x-telegram-init-data': initData,
         },
-        body: JSON.stringify({ rub: Math.max(1, Math.floor(amount/2)) })
+        body: JSON.stringify({ amount_rub: Math.max(100, (Number(stars) || 0)) }),
       });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error || 'server_error');
-      const url: string = json.result;
-      window.location.href = url;
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'createTon failed');
+
+      window.open(data.result, '_blank');
     } catch (e: any) {
-      setError(e.message || 'error');
+      setErr(e.message || 'unknown');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="mb-4">
-      <a href="/" className="text-blue-500 hover:underline">Назад</a>
-    </div>
-    <div className="max-w-xl mx-auto p-5 pb-24">
-      <h1 className="text-3xl font-semibold mb-5">Пополнение</h1>
-
-      <div className="mb-4 inline-flex bg-gray-100 rounded-xl p-1">
-        <button onClick={()=>setTab('stars')}
-          className={'px-4 py-2 rounded-lg transition ' + (tab==='stars'?'bg-white shadow':'opacity-70')}>
-          Звёзды
-        </button>
-        <button onClick={()=>setTab('ton')}
-          className={'px-4 py-2 rounded-lg transition ' + (tab==='ton'?'bg-white shadow':'opacity-70')}>
-          TON
-        </button>
+    <div className="p-5 pb-24 max-w-xl mx-auto">
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={back} className="text-sky-600 font-medium">Назад</button>
+        <h1 className="text-3xl font-extrabold">Пополнение</h1>
       </div>
 
-      {tab==='stars' && (
+      <div className="flex gap-3 mb-6">
+        <button
+          onClick={() => setTab('stars')}
+          className={`px-4 py-2 rounded-xl border ${tab==='stars'?'bg-white shadow':'bg-gray-100'}`}
+        >Звёзды</button>
+        <button
+          onClick={() => setTab('ton')}
+          className={`px-4 py-2 rounded-xl border ${tab==='ton'?'bg-white shadow':'bg-gray-100'}`}
+        >TON</button>
+      </div>
+
+      {tab==='stars' ? (
         <div className="space-y-4">
-          <label className="block text-gray-500">Сумма в звёздах</label>
-          <input type="number" min={1} value={amount}
-            onChange={e=>setAmount(parseInt(e.target.value||'0'))}
-            className="w-full rounded-xl border bg-gray-100/70 px-4 py-3 outline-none" />
-          <button onClick={createStarsInvoice} disabled={loading}
-            className="w-full rounded-2xl py-3 text-white font-semibold
-                       bg-gradient-to-r from-sky-500 to-blue-600 shadow-lg">
-            {loading ? 'Создаём...' : 'Создать счёт'}
-          </button>
+          <label className="block text-gray-600 text-sm">Сумма в звёздах</label>
+          <input
+            inputMode="numeric"
+            value={stars}
+            onChange={e=>setStars(e.target.value)}
+            className="w-full rounded-2xl border px-4 py-3 bg-gray-100"
+          />
+          <GradientButton disabled={loading} onClick={createStarsInvoice}>
+            {loading ? 'Создаём…' : 'Создать счёт'}
+          </GradientButton>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Будет открыт криптопроцессинг; мы зачислим TON после подтверждения.
+          </p>
+          <GradientButton disabled={loading} onClick={createTonInvoice}>
+            {loading ? 'Создаём…' : 'Создать счёт в TON'}
+          </GradientButton>
         </div>
       )}
 
-      {tab==='ton' && (
-        <div className="space-y-4">
-          <p className="text-gray-500 text-sm">Будет открыт криптопроцессинг; мы зачислим TON после подтверждения.</p>
-          <button onClick={createTonInvoice} disabled={loading}
-            className="w-full rounded-2xl py-3 text-white font-semibold
-                       bg-gradient-to-r from-teal-500 to-emerald-600 shadow-lg">
-            {loading ? 'Создаём...' : 'Создать счёт в TON'}
-          </button>
-        </div>
-      )}
+      {err && <p className="mt-4 text-red-600">Ошибка: {err}</p>}
 
-      {error && <p className="mt-4 text-red-500">Ошибка: {error}</p>}
-      <p className="text-xs text-gray-500 mt-6">
+      <p className="mt-6 text-gray-500 text-sm">
         Для звёзд оплата происходит внутри Telegram. Для TON откроется платёжная страница.
       </p>
     </div>

@@ -1,23 +1,24 @@
-'use client';
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebaseClient';
 
-export function useRealtimeBalance(userId?: string | number) {
-  const [stars, setStars] = useState<number | null>(null);
-  const [ton, setTon] = useState<number | null>(null);
+type BalancesDoc = { stars?: number; ton?: number };
+
+export function useRealtimeBalance(userId?: string) {
+  const [stars, setStars] = useState<number>(0);
+  const [ton, setTon] = useState<number>(0);
 
   useEffect(() => {
     if (!userId) return;
-    const d = doc(db, `users/${userId}/wallet/balances`);
-    const unsub = onSnapshot(d, (snap) => {
-      const data = snap.data() || {};
-      setStars(typeof data.stars === 'number' ? data.stars : 0);
-      setTon(typeof data.ton === 'number' ? data.ton : 0);
+    const ref = doc(db, 'users', userId, 'wallet', 'balances');
+    const unsub = onSnapshot(ref, (snap) => {
+      const d = (snap.data() || {}) as BalancesDoc;
+      setStars(d.stars || 0);
+      setTon(d.ton || 0);
     });
     return () => unsub();
   }, [userId]);
 
-  const rub = stars != null ? Math.floor((stars as number) / 2) : null;
+  const rub = stars / 2;
   return { stars, ton, rub };
 }
