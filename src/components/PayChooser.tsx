@@ -1,4 +1,4 @@
-
+// src/components/PayChooser.tsx
 'use client';
 import { Star, Coins } from 'lucide-react';
 import { useRouter } from 'next/navigation';

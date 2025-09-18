@@ -3,29 +3,37 @@
 
 import React, { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { safeOpenInvoice } from '@/lib/tg';
 
-export const dynamic = 'force-dynamic'; // избегаем пререндеринга страницы
+export const dynamic = 'force-dynamic'; // не пререндерим статикой
 
 function TopupInner(){
   const sp = useSearchParams();
   const defType = (sp.get('type') || 'stars') as 'stars'|'ton';
   const [type, setType] = useState<'stars'|'ton'>(defType);
   const [amount, setAmount] = useState<number>(50);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const create = async ()=>{
-    if (type==='stars'){
-      const res = await fetch('/api/topup/stars', { method:'POST', body: JSON.stringify({ amount }) });
-      const data = await res.json().catch(()=>null);
-      if (data?.ok && data?.invoiceLink){
-        // Telegram сам откроет модалку, но на всякий случай откроем ссылку
-        window.location.href = data.invoiceLink;
-      }
-    } else {
-      const res = await fetch('/api/topup/ton', { method:'POST', body: JSON.stringify({ rub: amount }) });
-      const data = await res.json().catch(()=>null);
-      if (data?.ok && data?.payUrl){
+    setLoading(true); setError(null);
+    try {
+      if (type==='stars'){
+        const res = await fetch('/api/topup/stars', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount }) });
+        const data = await res.json().catch(()=>null);
+        if (!res.ok || !data?.invoiceLink) throw new Error(data?.error || 'stars_create_failed');
+        // Открываем модалку Telegram (или ссылку)
+        safeOpenInvoice(data.invoiceLink);
+      } else {
+        const res = await fetch('/api/topup/ton', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rub: amount }) });
+        const data = await res.json().catch(()=>null);
+        if (!res.ok || !data?.payUrl) throw new Error(data?.error || 'ton_create_failed');
         window.location.href = data.payUrl;
       }
+    } catch(e:any){
+      setError(e?.message || 'create_failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -52,9 +60,11 @@ function TopupInner(){
         className="w-full rounded-xl border border-white/10 bg-black/20 p-3 mb-4 outline-none"
       />
 
-      <button onClick={create} className="w-full rounded-2xl p-4 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-semibold shadow-lg active:translate-y-px">
-        Создать счёт
+      <button disabled={loading} onClick={create} className="w-full rounded-2xl p-4 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-semibold shadow-lg active:translate-y-px disabled:opacity-60">
+        {loading ? 'Создаём…' : 'Создать счёт'}
       </button>
+
+      {error && <p className="text-xs text-red-400 mt-3">Ошибка: {error}</p>}
 
       <p className="text-xs opacity-70 mt-3">
         Для звёзд оплата происходит внутри Telegram. Для TON откроется платёжная страница.
