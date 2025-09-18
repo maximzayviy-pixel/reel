@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+
+/* Reel Wallet look & feel */
+.bg-reel {
+  background: radial-gradient(1200px 800px at 20% -10%, #60a5ff 0%, transparent 60%),
+              linear-gradient(135deg, #0a66ff 0%, #4fc3ff 100%);
+}
+.btn-reel {
+  @apply rounded-2xl text-white px-4 py-3 font-semibold active:scale-[0.99] shadow-lg;
+  background: linear-gradient(135deg, #0a66ff 0%, #4fc3ff 100%);
+}
+.card { @apply bg-white/90 backdrop-blur rounded-3xl shadow p-4 border border-white/40; }
+.tabbar { @apply fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t; }
+.tabbtn { @apply flex-1 py-3 text-xs flex flex-col items-center justify-center; }
+.container { @apply max-w-md mx-auto p-4 pb-24; } /* pb for tabbar */
+
+.loader {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  border: 6px solid #dbeafe;
+  border-top-color: #0a66ff;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
