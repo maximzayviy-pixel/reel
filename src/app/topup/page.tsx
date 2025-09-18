@@ -1,21 +1,23 @@
-
+// src/app/topup/page.tsx
 'use client';
-import { useSearchParams } from 'next/navigation';
-import { useState } from 'react';
 
-export default function TopupPage(){
+import React, { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+
+export const dynamic = 'force-dynamic'; // избегаем пререндеринга страницы
+
+function TopupInner(){
   const sp = useSearchParams();
-  const defType = sp.get('type') || 'stars';
-  const [type, setType] = useState<'stars'|'ton'>(defType as any);
+  const defType = (sp.get('type') || 'stars') as 'stars'|'ton';
+  const [type, setType] = useState<'stars'|'ton'>(defType);
   const [amount, setAmount] = useState<number>(50);
 
   const create = async ()=>{
     if (type==='stars'){
-      // открываем платёж звёздами (client-side: уже реализовано у тебя; оставляю вызов)
       const res = await fetch('/api/topup/stars', { method:'POST', body: JSON.stringify({ amount }) });
       const data = await res.json().catch(()=>null);
       if (data?.ok && data?.invoiceLink){
-        // если Telegram не открыл модалку сам — покажем ссылку
+        // Telegram сам откроет модалку, но на всякий случай откроем ссылку
         window.location.href = data.invoiceLink;
       }
     } else {
@@ -55,8 +57,16 @@ export default function TopupPage(){
       </button>
 
       <p className="text-xs opacity-70 mt-3">
-        Для звёзд оплата происходит внутри Telegram. Для TON откроется платёжная страница (CryptoCloud/др.).
+        Для звёзд оплата происходит внутри Telegram. Для TON откроется платёжная страница.
       </p>
     </main>
+  );
+}
+
+export default function TopupPage(){
+  return (
+    <Suspense fallback={<main className="p-4 max-w-screen-sm mx-auto"><div className="animate-pulse h-7 w-40 rounded-md bg-white/20 mb-4"/><div className="animate-pulse h-10 w-full rounded-xl bg-white/10"/></main>}>
+      <TopupInner/>
+    </Suspense>
   );
 }
