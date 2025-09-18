@@ -3,7 +3,7 @@
 
 import React, { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { safeOpenInvoice } from '@/lib/tg';
+import { safeOpenInvoice } from '../../lib/tg'; // <-- фикс: относительный путь без алиаса
 
 export const dynamic = 'force-dynamic'; // не пререндерим статикой
 
@@ -22,7 +22,6 @@ function TopupInner(){
         const res = await fetch('/api/topup/stars', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ amount }) });
         const data = await res.json().catch(()=>null);
         if (!res.ok || !data?.invoiceLink) throw new Error(data?.error || 'stars_create_failed');
-        // Открываем модалку Telegram (или ссылку)
         safeOpenInvoice(data.invoiceLink);
       } else {
         const res = await fetch('/api/topup/ton', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rub: amount }) });
