@@ -1,58 +1,45 @@
-// Auto-fixed firebaseAdmin.ts with robust key handling
-import { getApps, initializeApp, cert, type App } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-import { getStorage } from 'firebase-admin/storage';
 import * as admin from 'firebase-admin';
 
-function parseServiceAccount(): any | null {
+let _initialized = false;
+
+function loadServiceAccount(): admin.ServiceAccount {
+  // Prefer base64 to avoid PEM newline issues in Vercel UI
+  const b64 = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_B64;
   const raw = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON;
-  if (!raw) return null;
 
-  let obj: any = null;
-  try {
-    // raw can be JSON or base64-encoded JSON
-    const txt = raw.trim().startsWith('{')
-      ? raw
-      : Buffer.from(raw, 'base64').toString('utf-8');
-    obj = JSON.parse(txt);
-  } catch {
-    return null;
+  let obj: any;
+  if (b64) {
+    const json = Buffer.from(b64, 'base64').toString('utf8');
+    obj = JSON.parse(json);
+  } else if (raw) {
+    obj = JSON.parse(raw);
+  } else {
+    throw new Error('Missing FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON or FIREBASE_ADMIN_SERVICE_ACCOUNT_B64');
   }
 
-  // Normalize private key in common formats
-  const k = obj.private_key || obj.privateKey || obj['private-key'];
-  if (typeof k === 'string') {
-    let normalized = k;
-    // Convert escaped \n to real newlines
-    normalized = normalized.replace(/\\n/g, '\n');
-    // Ensure proper header/footer line breaks
-    normalized = normalized.replace(/-----BEGIN PRIVATE KEY-----\s*/g, '-----BEGIN PRIVATE KEY-----\n');
-    normalized = normalized.replace(/\s*-----END PRIVATE KEY-----/g, '\n-----END PRIVATE KEY-----');
-    obj.private_key = normalized;
+  // Normalize PEM newlines
+  if (obj.private_key && typeof obj.private_key === 'string') {
+    obj.private_key = obj.private_key.replace(/\\n/g, '\n');
   }
-  return obj;
+  return obj as admin.ServiceAccount;
 }
 
-let app: App;
-const svc = parseServiceAccount();
-if (!getApps().length && svc) {
-  app = initializeApp({
-    credential: cert(svc),
-    storageBucket: svc.storageBucket,
-  });
-} else {
-  app = getApps()[0]!;
+export function ensureAdmin() {
+  if (_initialized) return;
+  if (!admin.apps.length) {
+    const sa = loadServiceAccount();
+    admin.initializeApp({
+      credential: admin.credential.cert(sa),
+      projectId: (sa as any).project_id,
+    });
+  }
+  _initialized = true;
 }
 
-const adminDb = getFirestore(app);
-const adminAuth = getAuth(app);
-const adminStorage = getStorage(app);
-
-export { app, admin, adminDb, adminAuth, adminStorage };
-
-
-/** Backwards-compatible helper for legacy imports */
 export function getAdminDB() {
-  return adminDb;
+  ensureAdmin();
+  return admin.firestore();
 }
+
+export const adminDb = getAdminDB();
+export { admin };

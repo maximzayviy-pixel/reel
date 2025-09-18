@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     if (!isAdminRequest(req as unknown as Request)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-    const { paymentId } = await req.json();
+    const { paymentId, reason } = await req.json();
     if (!paymentId) return NextResponse.json({ error: 'bad payload' }, { status: 400 });
 
     const adminDb = getAdminDB();

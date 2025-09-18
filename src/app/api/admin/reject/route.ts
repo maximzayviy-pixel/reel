@@ -6,7 +6,7 @@ import { sendMessage } from '../../../../lib/notify';
 export async function POST(req: NextRequest) {
   try {
     if (!isAdminRequest(req as unknown as Request)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-    const { paymentId } = await req.json();
+    const { paymentId, reason } = await req.json();
     if (!paymentId) return NextResponse.json({ error: 'bad payload' }, { status: 400 });
 
     const adminDb = getAdminDB();
@@ -48,9 +48,9 @@ export async function POST(req: NextRequest) {
     });
 
     const admins = (process.env.TELEGRAM_ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
-    const msg = `❌ Отклонён платёж #${paymentId} (${pay.rub} ₽)`;
+    const msg = `❌ Отклонён платёж #${paymentId} (${pay.rub} ₽)${reason ? `\nПричина: ${reason}` : ''}`;
     for (const a of admins) sendMessage(a, msg);
-    if (pay.user_id) sendMessage(String(pay.user_id), `❌ Ваш платёж на ${pay.rub} ₽ отклонён. Средства возвращены на баланс.`);
+    if (pay.user_id) sendMessage(String(pay.user_id), `❌ Ваш платёж на ${pay.rub} ₽ отклонён.${reason ? `\nПричина: ${reason}` : ''} Средства возвращены на баланс.`);
 
     return NextResponse.json({ ok: true });
   } catch (e:any) {

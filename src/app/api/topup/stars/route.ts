@@ -1,50 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireUserFromRequest } from '@/lib/tg';
+import { log } from '../../../../lib/logger';
 
-export const dynamic = 'force-dynamic';
+function getUserId(req: NextRequest): string | null {
+  const init = req.headers.get('x-telegram-init-data') || '';
+  try {
+    const p = new URLSearchParams(init);
+    const raw = p.get('user');
+    const u = raw ? JSON.parse(raw) : null;
+    return u?.id ? String(u.id) : null;
+  } catch { return null; }
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const user = requireUserFromRequest(req);
-    const { amount } = await req.json();
-    const a = Number(amount);
-    if (!Number.isFinite(a) || a < 1) {
-      return NextResponse.json({ ok: false, error: 'bad_amount' }, { status: 400 });
-    }
+    const { stars } = await req.json();
+    const userId = getUserId(req);
+    if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    if (!stars || stars <= 0) return NextResponse.json({ error: 'bad stars' }, { status: 400 });
 
-    const botToken = (process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN) as string;
-    if (!botToken) return NextResponse.json({ ok: false, error: 'no_bot_token' }, { status: 500 });
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) return NextResponse.json({ error: 'no bot token' }, { status: 500 });
 
-    // Stars (XTR) usually expect minor units; multiply by 100 just in case.
-    const units = Math.round(a * 100);
+    // For Stars, use currency XTR and amount in "stars units". Telegram handles conversion.
+    const payload = {
+      title: "Reel Wallet: пополнение",
+      description: `Пополнение баланса на ${stars} ⭐`,
+      payload: `stars:${userId}:${Date.now()}`,
+      currency: "XTR",
+      prices: [{ label: "Stars", amount: Math.round(stars) }],
+    };
 
-    const resp = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/createInvoiceLink`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Reel Wallet: пополнение',
-        description: `Пополнение баланса пользователя ${user.username || user.id}`,
-        payload: `topup:${user.id}:${a}`,
-        currency: 'XTR',
-        prices: [{ label: 'Reel Wallet', amount: units }],
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
+    const j = await res.json();
+    log('createInvoiceLink', j);
+    if (!j?.ok) return NextResponse.json({ error: j?.description || 'telegram error' }, { status: 502 });
 
-    const text = await resp.text();
-    let data: any;
-    try { data = JSON.parse(text); } catch { data = null; }
-
-    if (!resp.ok || !data?.ok) {
-      const err = data?.description || text || `http_${resp.status}`;
-      return NextResponse.json({ ok: false, error: err }, { status: 500 });
-    }
-
-    return NextResponse.json({ ok: true, link: data.result });
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    if (msg.startsWith('UNAUTHORIZED')) {
-      return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
-    }
-    return NextResponse.json({ ok: false, error: msg || 'server_error' }, { status: 500 });
+    return NextResponse.json({ link: j.result, payload: payload.payload });
+  } catch (e:any) {
+    log('stars error', e?.message);
+    return NextResponse.json({ error: e?.message || 'internal' }, { status: 500 });
   }
 }
