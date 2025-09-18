@@ -1,9 +1,10 @@
-
+// src/components/BalanceText.tsx
 'use client';
+
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebaseClient';
-import { useQuoteTonRub } from '@/hooks/useQuote';
+import { db } from '../lib/firebaseClient';     // <-- без алиаса @
+import { useQuoteTonRub } from '../hooks/useQuote'; // <-- без алиаса @
 
 function Shimmer({width='8rem'}:{width?:string}){
   return <span className="inline-block animate-pulse h-6 rounded-md bg-white/30" style={{width}}/>;
