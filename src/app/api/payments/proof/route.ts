@@ -6,8 +6,6 @@ import { sendMessage, sendPhoto } from '../../../../lib/notify';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 /**
  * User submits payment proof (QR/photo URL) for a pending SBP payment.
