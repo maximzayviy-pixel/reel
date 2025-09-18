@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '../../../lib/firebaseAdmin';
+import { getAdminDB } from '../../../lib/firebaseAdmin';
 import { getTonRate } from '../../../lib/rates';
 import { getUserIdFromRequest } from '../../../lib/telegram';
 
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
     const userId = getUserIdFromRequest(req as unknown as Request);
     const now = Date.now();
     const expires = now + 10*60*1000;
+    const adminDb = getAdminDB();
     const ref = adminDb.collection('quotes').doc();
     await ref.set({ user_id:userId, rub, stars, ton, rate_rub_per_ton:rate, status:'active', expires_at_ms:expires, created_at_ms:now });
     return NextResponse.json({ id: ref.id, rub, stars, ton, expires_at_ms: expires });
