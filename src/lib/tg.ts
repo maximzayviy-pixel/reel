@@ -1,53 +1,72 @@
-import { NextRequest } from "next/server";
-import { parse } from "querystring";
+import type { NextRequest } from "next/server";
+import crypto from "crypto";
 
-export interface TGUser {
-  id: string;
+export type TGUser = {
+  id: number;
   username?: string;
   first_name?: string;
   last_name?: string;
   photo_url?: string;
+};
+
+function getRawInitDataFromReq(req: NextRequest): string | null {
+  // 1) Header (preferred when coming from Mini App)
+  const fromHeader = req.headers.get("x-telegram-init-data");
+  if (fromHeader) return fromHeader;
+
+  // 2) Search param (tgWebAppData)
+  const url = new URL(req.url);
+  const fromSearch = url.searchParams.get("tgWebAppData");
+  if (fromSearch) return fromSearch;
+
+  // 3) Cookie (if you store it there)
+  const cookie = req.headers.get("cookie") || "";
+  const m = cookie.match(/tg_init=([^;]+)/);
+  if (m) return decodeURIComponent(m[1]);
+
+  return null;
 }
 
-/**
- * Используется на сервере (API-роуты).
- */
-export function requireUserFromRequest(req: NextRequest): TGUser {
-  const initDataRaw = req.headers.get("x-telegram-init-data");
-  if (!initDataRaw) {
-    throw new Error("Unauthorized: missing init data");
-  }
-  const parsed = parse(initDataRaw);
-  if (!parsed.user) {
-    throw new Error("Unauthorized: missing user");
-  }
-  const user = JSON.parse(parsed.user as string) as TGUser;
-  if (!user.id) {
-    throw new Error("Unauthorized: invalid user");
-  }
-  return user;
+function validateInitData(raw: string): boolean {
+  const secret = crypto.createHash("sha256").update(process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN || "").digest();
+  const parsed = new URLSearchParams(raw);
+  const hash = parsed.get("hash") || "";
+
+  const dataCheckArr: string[] = [];
+  parsed.forEach((v, k) => {
+    if (k === "hash") return;
+    dataCheckArr.push(`${k}=${v}`);
+  });
+  dataCheckArr.sort();
+  const dataCheckString = dataCheckArr.join("\n");
+
+  const hmac = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
+  return hmac === hash;
 }
 
-/**
- * Используется на клиенте (React-компоненты).
- */
-export function getInitData(): string | null {
-  if (typeof window === "undefined") return null;
-  return (window as any).Telegram?.WebApp?.initData || null;
-}
-
-/**
- * Берём user.id без строгой проверки (для UI).
- */
-export function getUserIdUnsafe(): string | null {
+function extractUser(raw: string): TGUser | null {
+  const parsed = new URLSearchParams(raw);
+  const userJson = parsed.get("user");
+  if (!userJson) return null;
   try {
-    const raw = getInitData();
-    if (!raw) return null;
-    const parsed = parse(raw);
-    if (!parsed.user) return null;
-    const user = JSON.parse(parsed.user as string) as TGUser;
-    return user.id;
+    const u = JSON.parse(userJson);
+    return {
+      id: Number(u.id),
+      username: u.username,
+      first_name: u.first_name,
+      last_name: u.last_name,
+      photo_url: u.photo_url,
+    };
   } catch {
     return null;
   }
+}
+
+export function requireUserFromRequest(req: NextRequest): TGUser {
+  const raw = getRawInitDataFromReq(req);
+  if (!raw) throw new Error("UNAUTHORIZED_NO_INITDATA");
+  if (!validateInitData(raw)) throw new Error("UNAUTHORIZED_BAD_SIGNATURE");
+  const user = extractUser(raw);
+  if (!user?.id) throw new Error("UNAUTHORIZED_NO_USER");
+  return user;
 }
