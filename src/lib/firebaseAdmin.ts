@@ -1,45 +1,30 @@
-import * as admin from 'firebase-admin';
+import { getApps, initializeApp, cert, ServiceAccount } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
-let _initialized = false;
+function parseServiceAccount(): ServiceAccount {
+  let raw = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON;
+  if (!raw) throw new Error("FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON is missing");
 
-function loadServiceAccount(): admin.ServiceAccount {
-  // Prefer base64 to avoid PEM newline issues in Vercel UI
-  const b64 = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_B64;
-  const raw = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON;
-
-  let obj: any;
-  if (b64) {
-    const json = Buffer.from(b64, 'base64').toString('utf8');
-    obj = JSON.parse(json);
-  } else if (raw) {
+  let obj: any = null;
+  try {
     obj = JSON.parse(raw);
-  } else {
-    throw new Error('Missing FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON or FIREBASE_ADMIN_SERVICE_ACCOUNT_B64');
+  } catch {
+    try {
+      const decoded = Buffer.from(raw, "base64").toString("utf8");
+      obj = JSON.parse(decoded);
+    } catch {
+      throw new Error("Failed to parse FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON");
+    }
   }
-
-  // Normalize PEM newlines
-  if (obj.private_key && typeof obj.private_key === 'string') {
-    obj.private_key = obj.private_key.replace(/\\n/g, '\n');
+  if (typeof obj.private_key === "string") {
+    obj.private_key = obj.private_key.replace(/\\n/g, "\n");
   }
-  return obj as admin.ServiceAccount;
-}
-
-export function ensureAdmin() {
-  if (_initialized) return;
-  if (!admin.apps.length) {
-    const sa = loadServiceAccount();
-    admin.initializeApp({
-      credential: admin.credential.cert(sa),
-      projectId: (sa as any).project_id,
-    });
-  }
-  _initialized = true;
+  return obj as ServiceAccount;
 }
 
 export function getAdminDB() {
-  ensureAdmin();
-  return admin.firestore();
+  const app = getApps().length
+    ? getApps()[0]
+    : initializeApp({ credential: cert(parseServiceAccount()) });
+  return getFirestore(app);
 }
-
-export const adminDb = getAdminDB();
-export { admin };

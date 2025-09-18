@@ -1,100 +1,111 @@
-// src/app/topup/page.tsx
 'use client';
-import React, { Suspense, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import React, { useMemo, useState } from 'react';
 
-declare global { interface Window { Telegram?: any } }
-
-export const dynamic = 'force-dynamic';
-
-const SegBtn = ({active, children, onClick}:{active:boolean, children:any, onClick:()=>void}) => (
-  <button onClick={onClick} className={"px-4 py-2 text-sm font-medium transition " + (active ? "bg-white/15 text-white" : "text-white/70 hover:text-white") }>
-    {children}
-  </button>
-);
-
-function TopupInner(){
-  const sp = useSearchParams();
-  const defType = (sp.get('type') || 'stars') as 'stars'|'ton';
-  const [type, setType] = useState<'stars'|'ton'>(defType);
+export default function TopupPage() {
+  const [tab, setTab] = useState<'stars' | 'ton'>('stars');
   const [amount, setAmount] = useState<number>(50);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string| null>(null);
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
 
   const tg = (globalThis as any)?.Telegram?.WebApp;
 
-  async function create(){
-    setError(null); setLoading(true);
-    try{
-      if(type==='stars'){
-        const res = await fetch('/api/topup/stars', {
-          method:'POST',
-          headers:{
-            'Content-Type':'application/json',
-            // КЛЮЧЕВОЕ: передаём initData чтобы сервер не ругался "unauthorized"
-            'x-telegram-init-data': tg?.initData || ''
-          },
-          body: JSON.stringify({ amount })
+  async function createStarsInvoice() {
+    setError(''); setLoading(true);
+    try {
+      const init = tg?.initData || '';
+      const res = await fetch('/api/topup/stars', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-telegram-init-data': init,
+        },
+        body: JSON.stringify({ amount })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'server_error');
+      const link: string = json.result;
+      if (tg?.openInvoice) {
+        tg.openInvoice(link, (status: any) => {
+          // status: paid / cancelled / failed
+          if (status === 'paid') tg?.showAlert?.('Оплачено!');
         });
-        const data = await res.json().catch(()=>null);
-        if(!res.ok || !data?.invoiceLink) throw new Error(data?.error || 'create_failed');
-        // внутри Telegram можно открыть сразу, иначе показать кнопку/ссылку
-        if (tg?.openInvoice){
-          tg.openInvoice(data.invoiceLink, (status:string)=>console.log('invoice status:',status));
-        } else {
-          window.location.href = data.invoiceLink;
-        }
       } else {
-        const res = await fetch('/api/topup/ton', {
-          method:'POST',
-          headers:{'Content-Type':'application/json','x-telegram-init-data': tg?.initData || ''},
-          body: JSON.stringify({ rub: amount })
-        });
-        const data = await res.json().catch(()=>null);
-        if(!res.ok || !data?.payUrl) throw new Error(data?.error || 'create_failed');
-        window.location.href = data.payUrl;
+        window.location.href = link;
       }
-    }catch(e:any){
-      setError(e?.message || 'unknown_error');
-    }finally{
+    } catch (e: any) {
+      setError(e.message || 'error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createTonInvoice() {
+    setError(''); setLoading(true);
+    try {
+      const init = tg?.initData || '';
+      const res = await fetch('/api/topup/ton', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-telegram-init-data': init,
+        },
+        body: JSON.stringify({ rub: Math.max(1, Math.floor(amount/2)) })
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error || 'server_error');
+      const url: string = json.result;
+      window.location.href = url;
+    } catch (e: any) {
+      setError(e.message || 'error');
+    } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="p-4 max-w-screen-sm mx-auto">
-      <h1 className="text-2xl font-semibold mb-3">Пополнение</h1>
+    <div className="max-w-xl mx-auto p-5 pb-24">
+      <h1 className="text-3xl font-semibold mb-5">Пополнение</h1>
 
-      <div className="inline-flex rounded-2xl overflow-hidden border border-white/10 mb-3 backdrop-blur-sm">
-        <SegBtn active={type==='stars'} onClick={()=>setType('stars')}>Звёзды</SegBtn>
-        <SegBtn active={type==='ton'} onClick={()=>setType('ton')}>TON</SegBtn>
+      <div className="mb-4 inline-flex bg-gray-100 rounded-xl p-1">
+        <button onClick={()=>setTab('stars')}
+          className={'px-4 py-2 rounded-lg transition ' + (tab==='stars'?'bg-white shadow':'opacity-70')}>
+          Звёзды
+        </button>
+        <button onClick={()=>setTab('ton')}
+          className={'px-4 py-2 rounded-lg transition ' + (tab==='ton'?'bg-white shadow':'opacity-70')}>
+          TON
+        </button>
       </div>
 
-      <label className="block text-sm opacity-80 mb-1">Сумма в {type==='stars'?'звёздах':'рублях'}</label>
-      <input
-        type="number"
-        value={amount}
-        onChange={e=>setAmount(Number(e.target.value||0))}
-        className="w-full rounded-xl border border-white/10 bg-black/20 p-3 mb-4 outline-none"
-      />
+      {tab==='stars' && (
+        <div className="space-y-4">
+          <label className="block text-gray-500">Сумма в звёздах</label>
+          <input type="number" min={1} value={amount}
+            onChange={e=>setAmount(parseInt(e.target.value||'0'))}
+            className="w-full rounded-xl border bg-gray-100/70 px-4 py-3 outline-none" />
+          <button onClick={createStarsInvoice} disabled={loading}
+            className="w-full rounded-2xl py-3 text-white font-semibold
+                       bg-gradient-to-r from-sky-500 to-blue-600 shadow-lg">
+            {loading ? 'Создаём...' : 'Создать счёт'}
+          </button>
+        </div>
+      )}
 
-      <button onClick={create} disabled={loading} className="w-full rounded-2xl p-4 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-semibold shadow-lg active:translate-y-px disabled:opacity-60">
-        {loading?'Создаём…':'Создать счёт'}
-      </button>
+      {tab==='ton' && (
+        <div className="space-y-4">
+          <p className="text-gray-500 text-sm">Будет открыт криптопроцессинг; мы зачислим TON после подтверждения.</p>
+          <button onClick={createTonInvoice} disabled={loading}
+            className="w-full rounded-2xl py-3 text-white font-semibold
+                       bg-gradient-to-r from-teal-500 to-emerald-600 shadow-lg">
+            {loading ? 'Создаём...' : 'Создать счёт в TON'}
+          </button>
+        </div>
+      )}
 
-      {error && <p className="text-sm text-red-400 mt-3">Ошибка: {error}</p>}
-
-      <p className="text-xs opacity-70 mt-3">
+      {error && <p className="mt-4 text-red-500">Ошибка: {error}</p>}
+      <p className="text-xs text-gray-500 mt-6">
         Для звёзд оплата происходит внутри Telegram. Для TON откроется платёжная страница.
       </p>
-    </main>
-  );
-}
-
-export default function Page(){
-  return (
-    <Suspense fallback={<main className="p-4 max-w-screen-sm mx-auto"><div className="animate-pulse h-7 w-40 rounded-md bg-white/20 mb-4"/><div className="animate-pulse h-10 w-full rounded-xl bg-white/10"/></main>}>
-      <TopupInner/>
-    </Suspense>
+    </div>
   );
 }
