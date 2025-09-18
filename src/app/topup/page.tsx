@@ -6,6 +6,19 @@ import Tabs from '../../components/Tabs';
 import { Button } from '../../components/UI';
 import { useTG } from '../../context/UserContext';
 
+function extractInvoiceSlug(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const startattach = u.searchParams.get('startattach');
+    if (startattach && startattach.startsWith('invoice-')) {
+      return startattach.replace('invoice-','').trim();
+    }
+    const m = url.match(/\/invoice\/([A-Za-z0-9_-]+)/);
+    if (m) return m[1];
+  } catch {}
+  return null;
+}
+
 export default function TopupPage(){
   const { initData, loading } = useTG();
   const tg = (globalThis as any)?.Telegram?.WebApp;
@@ -18,12 +31,33 @@ export default function TopupPage(){
 
   useEffect(()=>{ try{ tg?.expand?.(); }catch{} },[tg]);
 
-  const safeOpen = (url: string) => {
+  const openStarsInvoice = (url: string) => {
+    setLastLink(url);
+    const slug = extractInvoiceSlug(url);
+    try {
+      if (slug && tg?.openInvoice) {
+        tg.openInvoice(slug, () => {});
+        return;
+      }
+    } catch {}
+    try {
+      if (tg?.openInvoice) {
+        tg.openInvoice(url, () => {});
+        return;
+      }
+    } catch {}
+    try {
+      if (tg?.openTelegramLink) { tg.openTelegramLink(url); return; }
+      if (tg?.openLink) { tg.openLink(url); return; }
+    } catch {}
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const openGenericLink = (url: string) => {
     setLastLink(url);
     try {
-      if (tg?.openInvoice) return tg.openInvoice(url, ()=>{});
-      if (tg?.openLink) return tg.openLink(url);
-      if (tg?.openTelegramLink) return tg.openTelegramLink(url);
+      if (tg?.openLink) { tg.openLink(url); return; }
+      if (tg?.openTelegramLink) { tg.openTelegramLink(url); return; }
     } catch {}
     window.open(url, '_blank', 'noopener,noreferrer');
   };
@@ -40,7 +74,7 @@ export default function TopupPage(){
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
-      safeOpen(j.link);
+      openStarsInvoice(j.link);
     } catch (e:any) { console.error(e); setError(e.message); }
     finally { setBusyStars(false); }
   };
@@ -57,7 +91,7 @@ export default function TopupPage(){
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
-      safeOpen(j.pay_url);
+      openGenericLink(j.pay_url);
     } catch (e:any) { console.error(e); setError(e.message); }
     finally { setBusyTon(false); }
   };
