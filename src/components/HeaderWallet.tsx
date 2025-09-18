@@ -4,15 +4,18 @@ import { useTGUser } from '../context/UserContext';
 
 export default function HeaderWallet({ rub }:{ rub:number }) {
   const user = useTGUser();
+  const name = user?.username ? '@'+user.username :
+    [user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'Гость';
+
   return (
     <div className="card bg-reel text-white">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-white/20" />
-          <div>
-            <div className="text-sm opacity-90">{user?.username ? '@'+user.username : 'Reel Wallet'}</div>
-            <div className="text-xs opacity-80">мини‑приложение</div>
-          </div>
+      <div className="flex items-center gap-3">
+        {user?.photo_url
+          ? <img src={user.photo_url} alt="" className="w-12 h-12 rounded-full border border-white/40 object-cover" />
+          : <div className="w-12 h-12 rounded-full bg-white/20" />}
+        <div>
+          <div className="text-sm opacity-90">{name}</div>
+          <div className="text-xs opacity-80">Reel Wallet</div>
         </div>
       </div>
       <div className="mt-4">

@@ -1,20 +1,27 @@
 'use client';
 import Tabs from '../../components/Tabs';
-import { useEffect, useState } from 'react';
+import { useTGUser } from '../../context/UserContext';
 
 export default function ProfilePage(){
-  const tg = (globalThis as any)?.Telegram?.WebApp;
-  const [user,setUser]=useState<any>(null);
-  useEffect(()=>{ if(tg?.initDataUnsafe?.user) setUser(tg.initDataUnsafe.user); },[tg]);
+  const user = useTGUser();
+  const name = user?.username ? '@'+user.username :
+    [user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'Гость';
+
   return (
     <>
-      <div className="card bg-reel text-white">
-        <div className="text-lg font-semibold">Reel Wallet</div>
-        <div className="text-sm opacity-80">{user?.username ? '@'+user.username : 'Гость'}</div>
+      <div className="card flex items-center gap-3">
+        {user?.photo_url
+          ? <img src={user.photo_url} alt="" className="w-16 h-16 rounded-full border object-cover" />
+          : <div className="w-16 h-16 rounded-full bg-gray-200" />}
+        <div>
+          <div className="text-lg font-semibold">{name}</div>
+          <div className="text-xs opacity-60">ID: {user?.id || '—'}</div>
+        </div>
       </div>
+
       <div className="grid grid-cols-2 gap-2 mt-4 text-sm">
-        <div className="card">Язык: Русский</div>
-        <div className="card">Admin ID: {process.env.NEXT_PUBLIC_ADMIN_ID || '—'}</div>
+        <div className="card">Верификация: {user?.verified ? '✔️' : '—'}</div>
+        <div className="card">Бан: {user?.banned ? '🚫' : '—'}</div>
       </div>
       <Tabs/>
     </>
