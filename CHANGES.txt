@@ -1,0 +1,24 @@
+REEL - CLEAN FINAL BUILD (based on working commit 4254f72)
+
+Included fixes/features:
+1) Auto-refresh balance on Home (src/app/page.tsx) every 5s and on tab focus.
+2) Rates endpoint: GET /api/rates (src/app/api/rates/route.ts) with ENV:
+   - TON_RATE_RUB (default 350)
+   - STARS_PER_RUB (default 2)
+3) SBP flow from balance:
+   - POST /api/sbp/order  (user creates SBP request with qrUrl; validates balance)
+   - POST /api/admin/sbp/confirm (admin confirms, deducts stars/ton atomically)
+   - POST /api/admin/sbp/reject  (admin rejects with reason)
+4) Telegram notifications: sendPhoto(...) in src/lib/notify.ts for admin alerts with QR image.
+5) All imports use relative paths (no "@/lib" alias).
+
+To remove from GitHub (if they exist in your current repo):
+- src/lib/tg.ts                # not used in this build (we use src/lib/telegram.ts)
+- src/app/api/debug/tg/        # temporary debug endpoint; not needed in prod
+- any leftover files with "…" placeholder or alias-based imports that do not exist here
+
+Migration advice:
+- Replace your repository contents with this archive's /src, package.json, etc.
+- Ensure ENV on Vercel: TELEGRAM_BOT_TOKEN, TELEGRAM_ADMIN_USER_IDS, FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON,
+  STARS_PER_RUB, TON_RATE_RUB.
+- Deploy.
