@@ -63,6 +63,9 @@ export default function TopupPage() {
   }
 
   return (
+    <div className="mb-4">
+      <a href="/" className="text-blue-500 hover:underline">Назад</a>
+    </div>
     <div className="max-w-xl mx-auto p-5 pb-24">
       <h1 className="text-3xl font-semibold mb-5">Пополнение</h1>
 

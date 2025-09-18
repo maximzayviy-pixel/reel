@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'bad_amount' }, { status: 400 });
     }
 
-    const botToken = process.env.BOT_TOKEN as string;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN as string;
     if (!botToken) return NextResponse.json({ ok: false, error: 'no_bot_token' }, { status: 500 });
 
     const resp = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {

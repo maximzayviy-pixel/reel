@@ -1,57 +1,30 @@
-import { getAdminDB, admin } from './firebaseAdmin';
+import { adminDb, admin } from './firebaseAdmin';
 
-/** Add or subtract balance with history record */
-export async function addBalance(
-  userId: string,
-  currency: 'stars' | 'ton',
-  amount: number,
-  note?: string,
-) {
+export async function addBalance(userId: string, currency: 'stars' | 'ton', amount: number, note?: string) {
   if (!userId) throw new Error('userId required');
-  const db = getAdminDB();
-  const balRef = db.doc(`users/${userId}/wallet/balances`);
-  const histRef = db.collection(`users/${userId}/history`).doc();
+  if (!Number.isFinite(amount)) throw new Error('amount invalid');
 
-  await db.runTransaction(async (t) => {
-    const snap = await t.get(balRef);
-    const cur = (snap.exists ? snap.data()?.[currency] : 0) ?? 0;
-    t.set(balRef, { [currency]: cur + amount }, { merge: true });
-    t.set(histRef, {
-      type: `admin_${amount >= 0 ? 'credit' : 'debit'}`,
+  const userRef = adminDb.collection('users').doc(userId);
+  const balRef = userRef.collection('wallet').doc('balances');
+  const histRef = userRef.collection('history').doc();
+
+  await adminDb.runTransaction(async (tx) => {
+    const balSnap = await tx.get(balRef);
+    const cur = balSnap.exists ? balSnap.data() as any : { stars: 0, ton: 0 };
+    cur[currency] = (cur[currency] || 0) + amount;
+    tx.set(balRef, cur, { merge: true });
+
+    tx.set(histRef, {
+      type: 'admin_credit',
       currency,
       amount,
-      rub: currency === 'stars' ? amount / 2 : undefined,
-      note: note ?? null,
-      created_at_ms: Date.now(),
-      _by: 'admin',
-    });
+      note: note || null,
+      created_at_ms: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
   });
 }
 
-export async function setVerified(userId: string, value: boolean) {
-  const db = getAdminDB();
-  await db.doc(`users/${userId}`).set({ verified: value, updated_at_ms: Date.now() }, { merge: true });
-}
-
-export async function setBanned(userId: string, value: boolean) {
-  const db = getAdminDB();
-  await db.doc(`users/${userId}`).set({ banned: value, updated_at_ms: Date.now() }, { merge: true });
-}
-
-/** Shorthand expected by your API routes (compat layer) */
-export const setBan = setBanned;
-export const setVerify = setVerified;
-
-/** Optional helper for atomic increments */
-export async function adjustBalance(
-  userId: string,
-  currency: 'stars' | 'ton',
-  delta: number
-) {
-  const db = getAdminDB();
-  const balRef = db.doc(`users/${userId}/wallet/balances`);
-  await balRef.set(
-    { [currency]: admin.firestore.FieldValue.increment(delta) },
-    { merge: true }
-  );
+export async function setBan(userId: string, banned: boolean) {
+  const userRef = adminDb.collection('users').doc(userId);
+  await userRef.set({ banned }, { merge: true });
 }

@@ -1,28 +1,29 @@
+// Auto-fixed version using FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON
+import { getApps, initializeApp, cert, type App } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 import * as admin from 'firebase-admin';
 
-let app: admin.app.App | null = null;
+const serviceAccount = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON
+  ? JSON.parse(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON)
+  : null;
 
-function getServiceAccount() {
-  const raw = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error('FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON is missing');
-
-  const json = raw.trim().startsWith('{')
-    ? raw
-    : Buffer.from(raw, 'base64').toString('utf8');
-
-  const sa = JSON.parse(json);
-  if (sa.private_key && sa.private_key.includes('\\n')) {
-    sa.private_key = sa.private_key.replace(/\\n/g, '\n');
-  }
-  return sa as admin.ServiceAccount;
+let app: App;
+if (!getApps().length && serviceAccount) {
+  app = initializeApp({
+    credential: cert(serviceAccount),
+    storageBucket: serviceAccount.storageBucket,
+  });
+} else {
+  app = getApps()[0]!;
 }
 
-export function getAdminDB() {
-  if (!app) {
-    app = admin.initializeApp({ credential: admin.credential.cert(getServiceAccount()) });
-  }
-  return admin.firestore();
-}
+const adminDb = getFirestore(app);
+const adminAuth = getAuth(app);
+const adminStorage = getStorage(app);
 
-// нужно для FieldValue/типов транзакций
-export { admin };
+export { app, admin, adminDb, adminAuth, adminStorage };
+
+export function getAdminDB(){ return adminDb; }
+export function getAdmin(){ return admin; }

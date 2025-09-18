@@ -28,7 +28,7 @@ function getRawInitDataFromReq(req: NextRequest): string | null {
 }
 
 function validateInitData(raw: string): boolean {
-  const secret = crypto.createHash("sha256").update(process.env.BOT_TOKEN || "").digest();
+  const secret = crypto.createHash("sha256").update(process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN || "").digest();
   const parsed = new URLSearchParams(raw);
   const hash = parsed.get("hash") || "";
 
