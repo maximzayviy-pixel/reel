@@ -1,8 +1,8 @@
 export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDB } from '@/lib/firebaseAdmin';
-import { isAdminRequest } from '@/lib/telegram';
-import { sendMessage } from '@/lib/notify';
+import { getAdminDB } from '../../../../lib/firebaseAdmin';
+import { isAdminRequest } from '../../../../lib/telegram';
+import { sendMessage } from '../../../../lib/notify';
 
 /**
  * Админ отклоняет СБП с причиной.
