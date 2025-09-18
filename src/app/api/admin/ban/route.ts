@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDB } from '../../../../lib/firebaseAdmin';
-import { isAdminRequest } from '../../../../lib/telegram';
+import { requireAdmin } from '../../../../lib/adminGuard';
+import { setBan } from '../../../../lib/balanceOps';
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest){
   try {
-    if (!isAdminRequest(req as unknown as Request)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    requireAdmin(req);
     const { userId, banned } = await req.json();
-    const adminDb = getAdminDB();
-    await adminDb.collection('users').doc(String(userId)).set({ banned: !!banned }, { merge: true });
+    if (!userId || typeof banned !== 'boolean') {
+      return NextResponse.json({ error: 'userId and banned required' }, { status: 400 });
+    }
+    await setBan(String(userId), banned);
     return NextResponse.json({ ok: true });
-  } catch (e:any) {
-    return NextResponse.json({ error: e?.message || 'internal' }, { status: 500 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'error' }, { status: 401 });
   }
 }
