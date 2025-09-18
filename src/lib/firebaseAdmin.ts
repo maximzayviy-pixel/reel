@@ -50,3 +50,9 @@ const adminAuth = getAuth(app);
 const adminStorage = getStorage(app);
 
 export { app, admin, adminDb, adminAuth, adminStorage };
+
+
+/** Backwards-compatible helper for legacy imports */
+export function getAdminDB() {
+  return adminDb;
+}
