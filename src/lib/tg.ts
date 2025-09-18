@@ -9,26 +9,46 @@ export type TGUser = {
   photo_url?: string;
 };
 
-function getRawInitDataFromReq(req: NextRequest): string | null {
-  // 1) Header (preferred when coming from Mini App)
-  const fromHeader = req.headers.get("x-telegram-init-data");
-  if (fromHeader) return fromHeader;
-
-  // 2) Search param (tgWebAppData)
-  const url = new URL(req.url);
-  const fromSearch = url.searchParams.get("tgWebAppData");
-  if (fromSearch) return fromSearch;
-
-  // 3) Cookie (if you store it there)
-  const cookie = req.headers.get("cookie") || "";
-  const m = cookie.match(/tg_init=([^;]+)/);
-  if (m) return decodeURIComponent(m[1]);
-
-  return null;
+function header(req: NextRequest, name: string): string | null {
+  // headers are case-insensitive but ensure we try a few common variants
+  return (
+    req.headers.get(name) ||
+    req.headers.get(name.toLowerCase()) ||
+    req.headers.get(name.toUpperCase())
+  );
 }
 
-function validateInitData(raw: string): boolean {
-  const secret = crypto.createHash("sha256").update(process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN || "").digest();
+function getRawInitDataFromReq(req: NextRequest): string | null {
+  // Prefer explicit header our app sets
+  const fromHeader =
+    header(req, "x-telegram-init-data") ||
+    header(req, "x-telegram-web-app-init-data") ||
+    header(req, "telegram-init-data");
+  if (fromHeader) return fromHeader;
+
+  // Then try query param (Telegram may pass tgWebAppData / tg_web_app_data)
+  const url = new URL(req.url);
+  const qs =
+    url.searchParams.get("x-telegram-init-data") ||
+    url.searchParams.get("tg_web_app_data") ||
+    url.searchParams.get("tgWebAppData") ||
+    url.searchParams.get("initData") ||
+    url.searchParams.get("init_data");
+  if (qs) return qs;
+
+  // Finally try JSON body if present
+  try {
+    // NOTE: reading body here is not allowed in Next edge runtime streaming,
+    // but our routes are nodejs and we call this only after route parsed JSON.
+    // So this is a noop here; kept for completeness.
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function computeHash(raw: string, botToken: string): string {
+  const secret = crypto.createHash("sha256").update(botToken).digest();
   const parsed = new URLSearchParams(raw);
   const hash = parsed.get("hash") || "";
 
@@ -41,22 +61,17 @@ function validateInitData(raw: string): boolean {
   const dataCheckString = dataCheckArr.join("\n");
 
   const hmac = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
-  return hmac === hash;
+  // return both for diagnostics
+  return hmac === hash ? "OK" : `BAD:${hash.slice(0, 8)}!=${hmac.slice(0, 8)}`;
 }
 
 function extractUser(raw: string): TGUser | null {
   const parsed = new URLSearchParams(raw);
-  const userJson = parsed.get("user");
-  if (!userJson) return null;
+  const userStr = parsed.get("user");
+  if (!userStr) return null;
   try {
-    const u = JSON.parse(userJson);
-    return {
-      id: Number(u.id),
-      username: u.username,
-      first_name: u.first_name,
-      last_name: u.last_name,
-      photo_url: u.photo_url,
-    };
+    const u = JSON.parse(userStr);
+    return u as TGUser;
   } catch {
     return null;
   }
@@ -65,8 +80,29 @@ function extractUser(raw: string): TGUser | null {
 export function requireUserFromRequest(req: NextRequest): TGUser {
   const raw = getRawInitDataFromReq(req);
   if (!raw) throw new Error("UNAUTHORIZED_NO_INITDATA");
-  if (!validateInitData(raw)) throw new Error("UNAUTHORIZED_BAD_SIGNATURE");
+
+  const botToken = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN || "";
+  if (!botToken) throw new Error("UNAUTHORIZED_NO_TOKEN");
+
+  const check = computeHash(raw, botToken);
+  if (check !== "OK") throw new Error(`UNAUTHORIZED_BAD_SIGNATURE:${check}`);
+
   const user = extractUser(raw);
   if (!user?.id) throw new Error("UNAUTHORIZED_NO_USER");
   return user;
+}
+
+// Lightweight helper for diagnostics in /api/debug/tg
+export function debugInitData(req: NextRequest) {
+  const raw = getRawInitDataFromReq(req);
+  const botToken = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN || "";
+  const user = raw ? extractUser(raw) : null;
+  const status = raw && botToken ? computeHash(raw, botToken) : "NO_RAW_OR_TOKEN";
+  return {
+    hasRaw: !!raw,
+    rawLength: raw?.length || 0,
+    user,
+    status, // "OK" or "BAD:..."
+    botTokenPresent: !!botToken,
+  };
 }
