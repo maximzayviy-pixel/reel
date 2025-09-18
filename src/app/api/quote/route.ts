@@ -1,4 +1,3 @@
-export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDB } from '../../../lib/firebaseAdmin';
 import { getUserIdFromRequest } from '../../../lib/telegram';
