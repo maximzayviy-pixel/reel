@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useTG } from '../../context/UserContext';
 
 export default function ProfilePage(){
-  const { user, initData, loading, setUser } = useTG();
+  const { user, initData, setUser } = useTG();
 
   useEffect(() => {
     const run = async () => {
@@ -23,8 +23,6 @@ export default function ProfilePage(){
   const id = user?.id || '—';
   const verified = user?.verified ? '✔️' : '—';
   const banned = user?.banned ? '🚫' : '—';
-
-  if (loading) return <div className="p-4">Загрузка…</div>;
 
   return (
     <>
