@@ -7,17 +7,20 @@ import { Button } from '../../components/UI';
 import { useTG } from '../../context/UserContext';
 
 export default function TopupPage(){
-  const { initData } = useTG();
+  const { initData, loading } = useTG();
   const tg = (globalThis as any)?.Telegram?.WebApp;
   const [stars, setStars] = useState<number>(50);
   const [tonRub, setTonRub] = useState<number>(1000);
   const [error, setError] = useState('');
+  const [busyStars, setBusyStars] = useState(false);
+  const [busyTon, setBusyTon] = useState(false);
 
   useEffect(()=>{ try{ tg?.expand?.(); }catch{} },[tg]);
 
   const topupStars = async () => {
     setError('');
     if (!initData) { setError('Открой Mini App внутри Telegram'); return; }
+    setBusyStars(true);
     try {
       const res = await fetch('/api/topup/stars', {
         method:'POST',
@@ -32,12 +35,14 @@ export default function TopupPage(){
       } else {
         window.open(link, '_blank');
       }
-    } catch (e:any) { setError(e.message); }
+    } catch (e:any) { console.error(e); setError(e.message); }
+    finally { setBusyStars(false); }
   };
 
   const topupTon = async () => {
     setError('');
     if (!initData) { setError('Открой Mini App внутри Telegram'); return; }
+    setBusyTon(true);
     try {
       const res = await fetch('/api/topup/ton', {
         method:'POST',
@@ -47,7 +52,8 @@ export default function TopupPage(){
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
       window.open(j.pay_url, '_blank');
-    } catch (e:any) { setError(e.message); }
+    } catch (e:any) { console.error(e); setError(e.message); }
+    finally { setBusyTon(false); }
   };
 
   return (
@@ -61,7 +67,7 @@ export default function TopupPage(){
           <input type="number" min={1} value={stars} onChange={e=>setStars(parseInt(e.target.value||'0'))} className="border rounded-xl p-2 w-28" />
           <div className="text-sm opacity-70">⭐</div>
         </div>
-        <div className="mt-3"><Button onClick={topupStars}>Пополнить звёздами</Button></div>
+        <div className="mt-3"><Button onClick={topupStars} disabled={busyStars || loading}>{busyStars?'Создаём счёт…':'Пополнить звёздами'}</Button></div>
         <div className="text-xs opacity-60 mt-2">Оплата внутри Telegram. После успеха звёзды будут зачислены.</div>
       </div>
 
@@ -71,7 +77,7 @@ export default function TopupPage(){
           <input type="number" min={1} value={tonRub} onChange={e=>setTonRub(parseInt(e.target.value||'0'))} className="border rounded-xl p-2 w-28" />
           <div className="text-sm opacity-70">₽</div>
         </div>
-        <div className="mt-3"><Button onClick={topupTon}>Создать счёт на оплату TON</Button></div>
+        <div className="mt-3"><Button onClick={topupTon} disabled={busyTon || loading}>{busyTon?'Создаём счёт…':'Создать счёт на оплату TON'}</Button></div>
         <div className="text-xs opacity-60 mt-2">Откроется платёжная страница CryptoCloud. ТОН зачислим после подтверждения.</div>
       </div>
 
