@@ -1,21 +1,33 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+export const dynamic = 'force-dynamic'; // disable static prerender for this page
+
+import { useEffect, useState } from 'react';
 import Tabs from '../../components/Tabs';
 
 export default function StatusPage(){
-  const params = new URLSearchParams(window.location.search);
-  const paymentId = params.get('paymentId')||'';
+  const [paymentId, setPaymentId] = useState<string>('');
   const [data, setData] = useState<any>(null);
 
+  // Read window only on client
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('paymentId') || '';
+    setPaymentId(id);
+  }, []);
+
   useEffect(()=>{
+    if (!paymentId) return;
     let alive = true;
     const loop = async () => {
-      const res = await fetch(`/api/admin/mark-paid?peek=${paymentId}`, { cache:'no-store' });
-      const j = await res.json();
-      if (alive) setData(j);
-      setTimeout(loop, 1500);
+      try {
+        const res = await fetch(`/api/admin/mark-paid?peek=${paymentId}`, { cache:'no-store' });
+        const j = await res.json();
+        if (alive) setData(j);
+      } catch {}
+      if (alive) setTimeout(loop, 1500);
     };
-    if (paymentId) loop();
+    loop();
     return ()=>{ alive=false };
   },[paymentId]);
 
