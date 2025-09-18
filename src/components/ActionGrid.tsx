@@ -14,7 +14,7 @@ export default function ActionGrid() {
   );
   return (
     <div className="grid grid-cols-4 gap-3">
-      <Item icon={<Plus size={18}/>} label="Пополнить" onClick={()=>router.push('/qr')} />
+      <Item icon={<Plus size={18}/>} label="Пополнить" onClick={()=>router.push('/topup')} />
       <Item icon={<ArrowUpRight size={18}/>} label="Перевести" onClick={()=>alert('Скоро')} />
       <Item icon={<ArrowLeftRight size={18}/>} label="Обменять" onClick={()=>alert('Скоро')} />
       <Item icon={<ShoppingBag size={18}/>} label="Оплатить" onClick={()=>router.push('/qr')} />
