@@ -1,12 +1,22 @@
 import * as admin from 'firebase-admin';
-let _app: admin.app.App | null = null;
+
+let app: admin.app.App | null = null;
 if (!admin.apps.length) {
   const raw = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON;
   if (!raw) throw new Error('FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON is not set');
   const cfg = JSON.parse(raw);
-  _app = admin.initializeApp({ credential: admin.credential.cert(cfg as admin.ServiceAccount) });
+  app = admin.initializeApp({
+    credential: admin.credential.cert(cfg as admin.ServiceAccount),
+    projectId: cfg.project_id,
+  });
 } else {
-  _app = admin.app();
+  app = admin.app();
 }
+
+// Firestore
 export const adminDb = admin.firestore();
+
+// Backward compatible export for routes that import { getAdminDB }
+export const getAdminDB = () => adminDb;
+
 export { admin };
