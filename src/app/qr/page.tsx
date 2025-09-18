@@ -6,10 +6,10 @@ import Tabs from '../../components/Tabs';
 import { Button } from '../../components/UI';
 import { parseSBPUrlAmount } from '../../lib/sbp';
 import CameraQR from '../../components/CameraQR';
+import { useTG } from '../../context/UserContext';
 
 export default function QRPage(){
-  const tg = (globalThis as any)?.Telegram?.WebApp;
-  const initData = tg?.initData || '';
+  const { initData } = useTG();
   const [url, setUrl] = useState('https://pay.example.bank/sbp?amount=1234.56');
   const [quote, setQuote] = useState<any>(null);
   const [err, setErr] = useState('');
@@ -20,6 +20,7 @@ export default function QRPage(){
 
   const calculate = useCallback(async () => {
     setErr('');
+    if (!initData) { setErr('Открой Mini App внутри Telegram'); return; }
     const rub = parseSBPUrlAmount(url) || 0;
     if (!rub) { setErr('В ссылке СБП не найдена сумма'); return; }
     const res = await fetch('/api/quote', {
@@ -34,6 +35,7 @@ export default function QRPage(){
 
   const choose = async (currency:'stars'|'ton') => {
     setErr('');
+    if (!initData) { setErr('Открой Mini App внутри Telegram'); return; }
     const res = await fetch('/api/choose', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': initData },

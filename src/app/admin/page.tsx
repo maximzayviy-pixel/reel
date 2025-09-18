@@ -4,10 +4,10 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState } from 'react';
 import Tabs from '../../components/Tabs';
 import { Button } from '../../components/UI';
+import { useTG } from '../../context/UserContext';
 
 export default function AdminPage(){
-  const tg = (globalThis as any)?.Telegram?.WebApp;
-  const initData = tg?.initData || '';
+  const { initData } = useTG();
   const [pending, setPending] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [err, setErr] = useState('');
@@ -28,6 +28,7 @@ export default function AdminPage(){
 
   const act = async (kind: 'paid'|'reject'|'ban'|'unban'|'verify'|'unverify', payload: any) => {
     setErr('');
+    if (!initData) { setErr('Открой Mini App внутри Telegram'); return; }
     try {
       if (kind === 'paid') await fetch('/api/admin/mark-paid', { method:'POST', headers: {'Content-Type':'application/json','x-telegram-init-data': initData}, body: JSON.stringify({ paymentId: payload }) });
       if (kind === 'reject') await fetch('/api/admin/reject', { method:'POST', headers: {'Content-Type':'application/json','x-telegram-init-data': initData}, body: JSON.stringify({ paymentId: payload }) });

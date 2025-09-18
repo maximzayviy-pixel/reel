@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDB } from '../../../lib/firebaseAdmin';
-import { getUserIdFromRequest } from '../../../lib/telegram';
 
 /** Helper: safely parse Telegram initData JSON 'user' field */
 function parseUserFromInit(initData: string) {
@@ -33,19 +32,18 @@ async function fetchAvatarUrl(userId: string) {
 export async function GET(req: NextRequest) {
   try {
     const initData = req.headers.get('x-telegram-init-data') || '';
-    const id = getUserIdFromRequest(req as unknown as Request);
     const adminDb = getAdminDB();
 
-    // read existing flags if present
+    const u = parseUserFromInit(initData);
+    if (!u?.id) return NextResponse.json({ error: 'no tg user' }, { status: 401 });
+    const id = String(u.id);
+
     const ref = adminDb.collection('users').doc(id);
     const snap = await ref.get();
     const existing = snap.exists ? snap.data() || {} : {};
 
-    const u = parseUserFromInit(initData) || {};
     let photo_url = u.photo_url || existing.photo_url || null;
-    if (!photo_url) {
-      photo_url = await fetchAvatarUrl(id);
-    }
+    if (!photo_url) photo_url = await fetchAvatarUrl(id);
 
     const userDoc = {
       tg_id: id,

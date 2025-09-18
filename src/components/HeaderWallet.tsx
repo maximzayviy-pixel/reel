@@ -1,9 +1,9 @@
 'use client';
 import React from 'react';
-import { useTGUser } from '../context/UserContext';
+import { useTG } from '../context/UserContext';
 
 export default function HeaderWallet({ rub }:{ rub:number }) {
-  const user = useTGUser();
+  const { user } = useTG();
   const name = user?.username ? '@'+user.username :
     [user?.first_name, user?.last_name].filter(Boolean).join(' ') || 'Гость';
 

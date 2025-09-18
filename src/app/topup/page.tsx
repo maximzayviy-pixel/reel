@@ -4,10 +4,11 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState } from 'react';
 import Tabs from '../../components/Tabs';
 import { Button } from '../../components/UI';
+import { useTG } from '../../context/UserContext';
 
 export default function TopupPage(){
+  const { initData } = useTG();
   const tg = (globalThis as any)?.Telegram?.WebApp;
-  const initData = tg?.initData || '';
   const [stars, setStars] = useState<number>(50);
   const [tonRub, setTonRub] = useState<number>(1000);
   const [error, setError] = useState('');
@@ -16,6 +17,7 @@ export default function TopupPage(){
 
   const topupStars = async () => {
     setError('');
+    if (!initData) { setError('Открой Mini App внутри Telegram'); return; }
     try {
       const res = await fetch('/api/topup/stars', {
         method:'POST',
@@ -26,10 +28,7 @@ export default function TopupPage(){
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
       const link = j.invoice_link;
       if ((window as any)?.Telegram?.WebApp?.openInvoice) {
-        (window as any).Telegram.WebApp.openInvoice(link, (status: string) => {
-          // 'paid'/'cancelled'/'failed' (WebApp event name may vary)
-          if (status === 'paid') alert('Зачисление звёзд будет выполнено автоматически');
-        });
+        (window as any).Telegram.WebApp.openInvoice(link, (status: string) => {});
       } else {
         window.open(link, '_blank');
       }
@@ -38,6 +37,7 @@ export default function TopupPage(){
 
   const topupTon = async () => {
     setError('');
+    if (!initData) { setError('Открой Mini App внутри Telegram'); return; }
     try {
       const res = await fetch('/api/topup/ton', {
         method:'POST',
@@ -47,7 +47,6 @@ export default function TopupPage(){
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
       window.open(j.pay_url, '_blank');
-      alert('После оплаты TON провайдер пришлёт подтверждение, и TON будут зачислены на баланс.');
     } catch (e:any) { setError(e.message); }
   };
 
