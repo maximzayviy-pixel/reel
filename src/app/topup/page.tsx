@@ -1,10 +1,21 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Tabs from '../../components/Tabs';
 import { Button } from '../../components/UI';
 import { useTG } from '../../context/UserContext';
+
+async function fetchBalance(initData?: string){
+  const res = await fetch('/api/me/balance', {
+    method: 'GET',
+    headers: initData ? {'x-telegram-init-data': initData} : {},
+    cache: 'no-store'
+  });
+  if (!res.ok) throw new Error('balance fetch failed');
+  const j = await res.json();
+  return j?.balances || { stars: 0, ton: 0 };
+}
 
 export default function TopupPage(){
   const { initData, loading } = useTG();
@@ -16,6 +27,9 @@ export default function TopupPage(){
   const [busyTon, setBusyTon] = useState(false);
   const [starsLink, setStarsLink] = useState<string>('');
   const [tonLink, setTonLink] = useState<string>('');
+  const [status, setStatus] = useState<string>('');
+  const [lastStarsBefore, setLastStarsBefore] = useState<number | null>(null);
+  const pollRef = useRef<any>(null);
 
   useEffect(()=>{ try{ tg?.expand?.(); }catch{} },[tg]);
 
@@ -26,15 +40,8 @@ export default function TopupPage(){
   };
 
   async function withTimeout<T>(p: Promise<T>, ms=12000): Promise<T> {
-    const ctrl = new AbortController();
-    const t = setTimeout(()=>ctrl.abort(), ms);
-    try {
-      // @ts-ignore
-      const r = await p;
-      return r;
-    } finally {
-      clearTimeout(t);
-    }
+    const t = setTimeout(()=>{ throw new Error('timeout'); }, ms);
+    try { const r = await p; return r; } finally { clearTimeout(t); }
   }
 
   const topupStars = async () => {
@@ -43,6 +50,8 @@ export default function TopupPage(){
     if (!initData) { setError('Открой Mini App внутри Telegram'); return; }
     setBusyStars(true);
     try {
+      const before = await fetchBalance(initData);
+      setLastStarsBefore(before.stars);
       const res = await withTimeout(fetch('/api/topup/stars', {
         method:'POST',
         headers: {'Content-Type':'application/json','x-telegram-init-data': initData},
@@ -51,13 +60,60 @@ export default function TopupPage(){
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
       setStarsLink(j.link);
+      setStatus('Счёт готов. Нажми «Оплатить» и не закрывай Телеграм до подтверждения.');
     } catch (e:any) {
-      console.error(e);
-      setError(e?.name === 'AbortError' ? 'Таймаут. Попробуй ещё раз.' : (e?.message || 'Ошибка'));
+      setError(e?.message || 'Ошибка');
     } finally {
       setBusyStars(false);
     }
   };
+
+  const onClickPayStars = async () => {
+    if (!starsLink) return;
+    setStatus('Ожидаем подтверждение оплаты…');
+    openLink(starsLink);
+    // Start short-lived polling: 10 tries * 3s = 30s
+    if (pollRef.current) clearInterval(pollRef.current);
+    let tries = 0;
+    pollRef.current = setInterval(async () => {
+      tries += 1;
+      try {
+        const b = await fetchBalance(initData || undefined);
+        if (lastStarsBefore !== null && b.stars > lastStarsBefore) {
+          setStatus('Оплата зафиксирована ✅ Баланс обновлён.');
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        } else if (tries >= 10) {
+          setStatus('Долго нет ответа. Если платёж прошёл — обнови баланс вручную.');
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      } catch {}
+    }, 3000);
+  };
+
+  const refreshNow = async () => {
+    setStatus('Обновляем баланс…');
+    try {
+      const b = await fetchBalance(initData || undefined);
+      if (lastStarsBefore !== null && b.stars > lastStarsBefore) setStatus('Оплата зафиксирована ✅ Баланс обновлён.');
+      else setStatus('Баланс обновлён.');
+    } catch { setStatus('Не удалось обновить.'); }
+  };
+
+  useEffect(() => {
+    const handler = (d:any) => {
+      if (!d) return;
+      if (d.status === 'paid') {
+        setStatus('Оплата подтверждена. Обновляем баланс…');
+        refreshNow();
+      } else if (d.status) {
+        setStatus(`Статус: ${d.status}`);
+      }
+    };
+    try{ tg?.onEvent?.('invoiceClosed', handler); }catch{}
+    return () => { try{ tg?.offEvent?.('invoiceClosed', handler); }catch{} };
+  }, [tg]);
 
   const topupTon = async () => {
     setError('');
@@ -73,9 +129,9 @@ export default function TopupPage(){
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
       setTonLink(j.pay_url);
+      setStatus('Счёт готов. Нажми «Оплатить TON».');
     } catch (e:any) {
-      console.error(e);
-      setError(e?.name === 'AbortError' ? 'Таймаут. Попробуй ещё раз.' : (e?.message || 'Ошибка'));
+      setError(e?.message || 'Ошибка');
     } finally {
       setBusyTon(false);
     }
@@ -85,6 +141,7 @@ export default function TopupPage(){
     <>
       <h1 className="text-lg font-semibold mb-2">Пополнение</h1>
       {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
+      {status && <div className="text-sm text-blue-700 mb-2">{status} <button className="underline" onClick={refreshNow}>Обновить баланс</button></div>}
 
       <div className="card">
         <div className="font-semibold mb-2">Звёзды Telegram</div>
@@ -98,7 +155,7 @@ export default function TopupPage(){
           </Button>
           {starsLink && (
             <div className="mt-2 flex items-center gap-2">
-              <Button onClick={()=>openLink(starsLink)}>Оплатить звёздами</Button>
+              <Button onClick={onClickPayStars}>Оплатить звёздами</Button>
               <a className="text-xs underline break-all" href={starsLink} target="_blank" rel="noreferrer">Ссылка на оплату</a>
             </div>
           )}
