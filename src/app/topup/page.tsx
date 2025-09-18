@@ -17,6 +17,15 @@ export default function TopupPage(){
 
   useEffect(()=>{ try{ tg?.expand?.(); }catch{} },[tg]);
 
+  const safeOpen = (url: string) => {
+    try {
+      if (tg?.openInvoice) return tg.openInvoice(url, ()=>{});
+      if (tg?.openLink) return tg.openLink(url);
+      if (tg?.openTelegramLink) return tg.openTelegramLink(url);
+    } catch {}
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const topupStars = async () => {
     setError('');
     if (!initData) { setError('Открой Mini App внутри Telegram'); return; }
@@ -29,12 +38,7 @@ export default function TopupPage(){
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
-      const link = j.invoice_link;
-      if ((window as any)?.Telegram?.WebApp?.openInvoice) {
-        (window as any).Telegram.WebApp.openInvoice(link, (status: string) => {});
-      } else {
-        window.open(link, '_blank');
-      }
+      safeOpen(j.invoice_link);
     } catch (e:any) { console.error(e); setError(e.message); }
     finally { setBusyStars(false); }
   };
@@ -51,7 +55,7 @@ export default function TopupPage(){
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
-      window.open(j.pay_url, '_blank');
+      safeOpen(j.pay_url);
     } catch (e:any) { console.error(e); setError(e.message); }
     finally { setBusyTon(false); }
   };
@@ -68,7 +72,7 @@ export default function TopupPage(){
           <div className="text-sm opacity-70">⭐</div>
         </div>
         <div className="mt-3"><Button onClick={topupStars} disabled={busyStars || loading}>{busyStars?'Создаём счёт…':'Пополнить звёздами'}</Button></div>
-        <div className="text-xs opacity-60 mt-2">Оплата внутри Telegram. После успеха звёзды будут зачислены.</div>
+        <div className="text-xs opacity-60 mt-2">2 ⭐ = 1 ₽. После оплаты звёзды зачислим автоматически.</div>
       </div>
 
       <div className="card mt-4">
@@ -78,7 +82,7 @@ export default function TopupPage(){
           <div className="text-sm opacity-70">₽</div>
         </div>
         <div className="mt-3"><Button onClick={topupTon} disabled={busyTon || loading}>{busyTon?'Создаём счёт…':'Создать счёт на оплату TON'}</Button></div>
-        <div className="text-xs opacity-60 mt-2">Откроется платёжная страница CryptoCloud. ТОН зачислим после подтверждения.</div>
+        <div className="text-xs opacity-60 mt-2">Откроется CryptoCloud. Подтвердим и зачислим TON на баланс.</div>
       </div>
 
       <Tabs/>

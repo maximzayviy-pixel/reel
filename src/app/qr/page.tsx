@@ -12,6 +12,7 @@ export default function QRPage(){
   const { initData } = useTG();
   const [url, setUrl] = useState('https://pay.example.bank/sbp?amount=1234.56');
   const [quote, setQuote] = useState<any>(null);
+  const [sent, setSent] = useState(false);
   const [err, setErr] = useState('');
 
   const handleScanned = useCallback((text: string) => {
@@ -20,9 +21,10 @@ export default function QRPage(){
 
   const calculate = useCallback(async () => {
     setErr('');
-    if (!initData) { setErr('Открой Mini App внутри Telegram'); return; }
+    setSent(false);
     const rub = parseSBPUrlAmount(url) || 0;
     if (!rub) { setErr('В ссылке СБП не найдена сумма'); return; }
+    if (!initData) { setErr('Открой Mini App внутри Telegram'); return; }
     const res = await fetch('/api/quote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': initData },
@@ -31,6 +33,7 @@ export default function QRPage(){
     const data = await res.json();
     if (!res.ok) { setErr(data?.error || 'Ошибка'); return; }
     setQuote(data);
+    setSent(true);
   }, [url, initData]);
 
   const choose = async (currency:'stars'|'ton') => {
@@ -53,6 +56,7 @@ export default function QRPage(){
         <div className="text-sm opacity-70 mb-2">Вставь <b>ссылку СБП</b>:</div>
         <input value={url} onChange={e=>setUrl(e.target.value)} className="w-full rounded-xl border p-2" placeholder="https://...sbp..." />
         <div className="mt-3"><Button onClick={calculate}>Рассчитать и отправить админу</Button></div>
+        {sent && <div className="text-xs text-green-700 mt-2">Отправлено админу. Выберите способ оплаты:</div>}
         {err && <div className="text-sm text-red-600 mt-2">{err}</div>}
       </div>
       {quote && (
