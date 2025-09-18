@@ -1,8 +1,8 @@
 export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDB } from '../';
-import { isAdminRequest } from '../';
-import { sendMessage } from '../';
+import { getAdminDB } from '../../../../../lib/firebaseAdmin';
+import { isAdminRequest } from '../../../../../lib/telegram';
+import { sendMessage } from '../../../../../lib/notify';
 
 /**
  * Админ подтверждает СБП и списывает средства с баланса юзера.

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDB } from '../';
-import { getUserIdFromRequest } from '../';
-import { sendMessage, sendPhoto } from '../';
+import { getAdminDB } from '../../../../lib/firebaseAdmin';
+import { getUserIdFromRequest } from '../../../../lib/telegram';
+import { sendMessage, sendPhoto } from '../../../../lib/notify';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
