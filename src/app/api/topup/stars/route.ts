@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDB } from '../../../../lib/firebaseAdmin';
+import { log } from '../../../../lib/logger';
 
-function getUserIdFromHeader(req: NextRequest): string | null {
+function getUserId(req: NextRequest): string | null {
   const init = req.headers.get('x-telegram-init-data') || '';
   try {
     const p = new URLSearchParams(init);
@@ -14,19 +14,20 @@ function getUserIdFromHeader(req: NextRequest): string | null {
 export async function POST(req: NextRequest) {
   try {
     const { stars } = await req.json();
-    if (!stars || stars <= 0) return NextResponse.json({ error: 'bad stars' }, { status: 400 });
-    const userId = getUserIdFromHeader(req);
+    const userId = getUserId(req);
     if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    if (!stars || stars <= 0) return NextResponse.json({ error: 'bad stars' }, { status: 400 });
 
-    const token = process.env.TELEGRAM_BOT_TOKEN!;
-    const mult = Number(process.env.STARS_PRICE_MULTIPLIER || 1);
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) return NextResponse.json({ error: 'no bot token' }, { status: 500 });
 
+    // For Stars, use currency XTR and amount in "stars units". Telegram handles conversion.
     const payload = {
-      title: "Reel Wallet Topup",
-      description: `Пополнение на ${stars} ⭐`,
-      payload: `topup-stars-${userId}-${Date.now()}`,
+      title: "Reel Wallet: пополнение",
+      description: `Пополнение баланса на ${stars} ⭐`,
+      payload: `stars:${userId}:${Date.now()}`,
       currency: "XTR",
-      prices: [{ label: "Stars", amount: Math.round(stars * mult) }],
+      prices: [{ label: "Stars", amount: Math.round(stars) }],
     };
 
     const res = await fetch(`https://api.telegram.org/bot${token}/createInvoiceLink`, {
@@ -35,20 +36,12 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(payload)
     });
     const j = await res.json();
-    if (!j?.ok) return NextResponse.json({ error: j?.description || 'bot error' }, { status: 502 });
-    const link = j.result;
+    log('createInvoiceLink', j);
+    if (!j?.ok) return NextResponse.json({ error: j?.description || 'telegram error' }, { status: 502 });
 
-    const adminDb = getAdminDB();
-    await adminDb.collection('topups').doc(payload.payload).set({
-      provider: 'telegram-stars',
-      user_id: userId,
-      stars,
-      status: 'pending',
-      created_at_ms: Date.now()
-    });
-
-    return NextResponse.json({ invoice_link: link, invoice_payload: payload.payload });
+    return NextResponse.json({ link: j.result, payload: payload.payload });
   } catch (e:any) {
+    log('stars error', e?.message);
     return NextResponse.json({ error: e?.message || 'internal' }, { status: 500 });
   }
 }

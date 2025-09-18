@@ -1,0 +1,1 @@
+export function log(...args:any[]){ try{console.log('[Reel]',...args);}catch{} }

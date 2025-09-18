@@ -14,10 +14,12 @@ export default function TopupPage(){
   const [error, setError] = useState('');
   const [busyStars, setBusyStars] = useState(false);
   const [busyTon, setBusyTon] = useState(false);
+  const [lastLink, setLastLink] = useState<string>('');
 
   useEffect(()=>{ try{ tg?.expand?.(); }catch{} },[tg]);
 
   const safeOpen = (url: string) => {
+    setLastLink(url);
     try {
       if (tg?.openInvoice) return tg.openInvoice(url, ()=>{});
       if (tg?.openLink) return tg.openLink(url);
@@ -38,7 +40,7 @@ export default function TopupPage(){
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || 'Ошибка');
-      safeOpen(j.invoice_link);
+      safeOpen(j.link);
     } catch (e:any) { console.error(e); setError(e.message); }
     finally { setBusyStars(false); }
   };
@@ -71,7 +73,12 @@ export default function TopupPage(){
           <input type="number" min={1} value={stars} onChange={e=>setStars(parseInt(e.target.value||'0'))} className="border rounded-xl p-2 w-28" />
           <div className="text-sm opacity-70">⭐</div>
         </div>
-        <div className="mt-3"><Button onClick={topupStars} disabled={busyStars || loading}>{busyStars?'Создаём счёт…':'Пополнить звёздами'}</Button></div>
+        <div className="mt-3">
+          <Button onClick={topupStars} disabled={busyStars || loading}>
+            {busyStars?'Создаём счёт…':'Пополнить звёздами'}
+          </Button>
+        </div>
+        {lastLink && <div className="text-xs opacity-60 mt-2 break-all">Ссылка на оплату: {lastLink}</div>}
         <div className="text-xs opacity-60 mt-2">2 ⭐ = 1 ₽. После оплаты звёзды зачислим автоматически.</div>
       </div>
 
@@ -81,8 +88,11 @@ export default function TopupPage(){
           <input type="number" min={1} value={tonRub} onChange={e=>setTonRub(parseInt(e.target.value||'0'))} className="border rounded-xl p-2 w-28" />
           <div className="text-sm opacity-70">₽</div>
         </div>
-        <div className="mt-3"><Button onClick={topupTon} disabled={busyTon || loading}>{busyTon?'Создаём счёт…':'Создать счёт на оплату TON'}</Button></div>
-        <div className="text-xs opacity-60 mt-2">Откроется CryptoCloud. Подтвердим и зачислим TON на баланс.</div>
+        <div className="mt-3">
+          <Button onClick={topupTon} disabled={busyTon || loading}>
+            {busyTon?'Создаём счёт…':'Создать счёт на оплату TON'}
+          </Button>
+        </div>
       </div>
 
       <Tabs/>
