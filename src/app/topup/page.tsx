@@ -1,23 +1,57 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+
+type DebugInfo = {
+  hasRaw: boolean;
+  rawLength: number;
+  user?: { id: number; username?: string };
+  status: string; // 'OK' or 'BAD:...' or 'NO_RAW_OR_TOKEN'
+  botTokenPresent: boolean;
+} | null;
 
 export default function TopupPage() {
   const [tab, setTab] = useState<'stars' | 'ton'>('stars');
   const [amount, setAmount] = useState<number>(50);
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [dbg, setDbg] = useState<DebugInfo>(null);
 
   const tg: any = (globalThis as any)?.Telegram?.WebApp;
+  const initData: string = tg?.initData || '';
+
+  useEffect(() => {
+    // Автодиагностика: спросим бэкенд видит ли initData и токен
+    (async () => {
+      try {
+        const res = await fetch('/api/debug/tg', {
+          method: 'POST',
+          headers: { 'x-telegram-init-data': initData || '' }
+        });
+        const json = await res.json();
+        setDbg(json);
+      } catch {
+        setDbg(null);
+      }
+    })();
+  }, [initData]);
+
+  const canSubmit = useMemo(() => {
+    if (loading) return false;
+    if (!amount || amount < 1) return false;
+    // Разрешаем сабмит только если подпись валидна или хотя бы есть сырой initData
+    if (!initData) return false;
+    if (dbg?.status && dbg.status !== 'OK') return false;
+    return true;
+  }, [loading, amount, initData, dbg?.status]);
 
   async function createStarsInvoice() {
     setError(''); setLoading(true);
     try {
-      const init = tg?.initData || '';
       const res = await fetch('/api/topup/stars', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-telegram-init-data': init,
+          'x-telegram-init-data': initData,
         },
         body: JSON.stringify({ amount }),
       });
@@ -40,12 +74,11 @@ export default function TopupPage() {
   async function createTonInvoice() {
     setError(''); setLoading(true);
     try {
-      const init = tg?.initData || '';
       const res = await fetch('/api/topup/ton', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-telegram-init-data': init,
+          'x-telegram-init-data': initData,
         },
         body: JSON.stringify({ amount }),
       });
@@ -62,9 +95,22 @@ export default function TopupPage() {
 
   return (
     <div className="max-w-xl mx-auto p-5 pb-24">
-      <div className="mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <a href="/" className="text-blue-500 hover:underline">Назад</a>
+        {/* Мини-диагностика */}
+        <span className="text-xs rounded-lg px-2 py-1 bg-gray-100">
+          WebApp: {tg ? 'yes' : 'no'} · initData: {initData ? 'yes' : 'no'} ·
+          {' '}sign: {dbg?.status || '…'}
+          {dbg?.user?.id ? ` · user:${dbg.user.username || dbg.user.id}` : ''}
+        </span>
       </div>
+
+      {dbg && dbg.status !== 'OK' && (
+        <div className="mb-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
+          Телеграм подпись не прошла ({dbg.status}).
+          Убедись, что мини‑апп открыто тем же ботом, чей токен в проде.
+        </div>
+      )}
 
       <h1 className="text-3xl font-semibold mb-5">Пополнение</h1>
 
@@ -94,18 +140,18 @@ export default function TopupPage() {
         <div>
           <button
             onClick={createStarsInvoice}
-            disabled={loading}
-            className="w-full rounded-2xl py-3 text-white font-semibold bg-gradient-to-r from-indigo-500 to-blue-600 shadow-lg">
-            {loading ? 'Создаём...' : 'Создать счёт'}
+            disabled={!canSubmit}
+            className="w-full rounded-2xl py-3 text-white font-semibold bg-gradient-to-r from-indigo-500 to-blue-600 shadow-lg disabled:opacity-50">
+            {loading ? 'Создаём…' : 'Создать счёт'}
           </button>
         </div>
       ) : (
         <div>
           <button
             onClick={createTonInvoice}
-            disabled={loading}
-            className="w-full rounded-2xl py-3 text-white font-semibold bg-gradient-to-r from-teal-500 to-emerald-600 shadow-lg">
-            {loading ? 'Создаём...' : 'Создать счёт в TON'}
+            disabled={!canSubmit}
+            className="w-full rounded-2xl py-3 text-white font-semibold bg-gradient-to-r from-teal-500 to-emerald-600 shadow-lg disabled:opacity-50">
+            {loading ? 'Создаём…' : 'Создать счёт в TON'}
           </button>
         </div>
       )}
