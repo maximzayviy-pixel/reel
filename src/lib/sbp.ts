@@ -1,15 +1,16 @@
-/** Парсер QR СБП формата ST00012|key=value|... */
-export function parseSBPQR(payload: string): { amount?: number, fields: Record<string,string> } {
-  const parts = payload.split('|');
-  const fields: Record<string,string> = {};
-  for (const part of parts) {
-    const idx = part.indexOf('=');
-    if (idx > 0) {
-      const k = part.slice(0, idx);
-      const v = part.slice(idx+1);
-      fields[k] = decodeURIComponent(v);
+/** Парсер суммы из ссылки СБП (URL). Ищем распространённые имена параметров. */
+export function parseSBPUrlAmount(url: string): number | undefined {
+  try {
+    const u = new URL(url);
+    const params = u.searchParams;
+    const keys = ['amount','sum','Amount','AMOUNT','a','s'];
+    for (const k of keys) {
+      const v = params.get(k);
+      if (v) {
+        const n = parseFloat(v.replace(',', '.'));
+        if (!Number.isNaN(n) && n > 0) return n;
+      }
     }
-  }
-  const amount = fields['Amount'] ? parseFloat(fields['Amount'].replace(',', '.')) : undefined;
-  return { amount, fields };
+  } catch {}
+  return undefined;
 }

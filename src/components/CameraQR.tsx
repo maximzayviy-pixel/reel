@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useRef, useState } from 'react';
 
-/** Camera QR scanner using html5-qrcode */
+/** Camera QR scanner using html5-qrcode, prefers back camera */
 export default function CameraQR({ onScan }: { onScan: (text: string) => void }) {
   const idRef = useRef(`qr-reader-${Math.random().toString(36).slice(2)}`);
   const [error, setError] = useState<string>('');
@@ -15,11 +15,12 @@ export default function CameraQR({ onScan }: { onScan: (text: string) => void })
         const mod = await import('html5-qrcode');
         const { Html5Qrcode } = mod;
         const cameras = await Html5Qrcode.getCameras();
-        const camId = cameras?.[0]?.id;
-        if (!camId) { setError('Камера не найдена'); return; }
+        if (!cameras || !cameras.length) { setError('Камера не найдена'); return; }
+        // предпочитаем заднюю
+        const back = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1] || cameras[0];
         html5QrCode = new Html5Qrcode(idRef.current);
         await html5QrCode.start(
-          camId,
+          back.id,
           { fps: 10, qrbox: 240 },
           (decoded: string) => {
             if (stopped) return;

@@ -1,7 +1,9 @@
 'use client';
 import React from 'react';
+import { useTGUser } from '../context/UserContext';
 
-export default function HeaderWallet({user, rub}:{user?:any, rub:number}) {
+export default function HeaderWallet({ rub }:{ rub:number }) {
+  const user = useTGUser();
   return (
     <div className="card bg-reel text-white">
       <div className="flex items-center justify-between">

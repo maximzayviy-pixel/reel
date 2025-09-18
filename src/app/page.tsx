@@ -5,12 +5,11 @@ import Tabs from '../components/Tabs';
 import { useEffect, useState } from 'react';
 
 export default function Home() {
-  const tg = (globalThis as any)?.Telegram?.WebApp;
-  const [user, setUser] = useState<any>(null);
-  useEffect(() => { if (tg?.initDataUnsafe?.user) setUser(tg.initDataUnsafe.user); }, [tg]);
+  const [rub, setRub] = useState(0);
+  useEffect(() => { setRub(0); }, []);
   return (
     <>
-      <HeaderWallet user={user} rub={0} />
+      <HeaderWallet rub={rub} />
       <div className="mt-4"><ActionGrid /></div>
       <Tabs/>
     </>

@@ -5,7 +5,7 @@ import { sendMessage } from '../../../lib/notify';
 
 export async function POST(req: NextRequest) {
   try {
-    const { quoteId, currency } = await req.json();
+    const { quoteId, currency, sbpUrl } = await req.json();
     if (!quoteId || !['stars','ton'].includes(currency)) return NextResponse.json({ error: 'bad payload' }, { status: 400 });
     const adminDb = getAdminDB();
     const userId = getUserIdFromRequest(req as unknown as Request);
@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
       const userRef = adminDb.collection('users').doc(userId);
       const userSnap = await tx.get(userRef);
       const balances = userSnap.exists ? (userSnap.data()!.balances || { stars: 0, ton: 0 }) : { stars: 0, ton: 0 };
+      if (userSnap.exists && userSnap.data()?.banned) throw new Error('Пользователь забанен');
       const bal = balances[currency] || 0;
       if (bal < amount) throw new Error('Недостаточно средств на балансе');
       const newBal = { ...balances, [currency]: bal - amount };
@@ -28,11 +29,12 @@ export async function POST(req: NextRequest) {
       const holdRef = adminDb.collection('holds').doc();
       tx.set(holdRef, { user_id: userId, quote_id: quoteId, currency, amount, status: 'active', created_at_ms: Date.now() });
       const payRef = adminDb.collection('payments').doc();
-      tx.set(payRef, { user_id: userId, quote_id: quoteId, rub: d.rub, currency, amount, status: 'pending', hold_id: holdRef.id, created_at_ms: Date.now(), updated_at_ms: Date.now() });
+      tx.set(payRef, { user_id: userId, quote_id: quoteId, rub: d.rub, currency, amount, status: 'pending', sbp_url: sbpUrl || null, hold_id: holdRef.id, created_at_ms: Date.now(), updated_at_ms: Date.now() });
       return { paymentId: payRef.id };
     });
     const admins = (process.env.TELEGRAM_ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
-    for (const adminId of admins) sendMessage(adminId, `🧾 Новый запрос оплаты: ${d.rub} ₽ (${currency.toUpperCase()} ≈ ${amount})`);
+    const text = `🧾 Новый платёж: ${d.rub} ₽\\nВалюта: ${currency.toUpperCase()} ≈ ${amount}\\nСсылка СБП: ${sbpUrl || '-'}`;
+    for (const adminId of admins) sendMessage(adminId, text);
     return NextResponse.json(result);
   } catch (e:any) {
     return NextResponse.json({ error: e?.message || 'internal' }, { status: 500 });
