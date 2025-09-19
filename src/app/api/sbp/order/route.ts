@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserIdFromRequest } from '../../../lib/telegram';
-import { getAdminDB } from '../../../lib/firebaseAdmin';
+import { getUserIdFromRequest } from '../../../../lib/telegram';
+import { getAdminDB } from '../../../../lib/firebaseAdmin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,7 @@ function parseNspkSum(qrUrl: string): number | null {
     if (!raw) return null;
     const n = Number(raw);
     if (!Number.isFinite(n)) return null;
-    // NSPK 'sum' передаётся в копейках => рубли = /100
+    // NSPK 'sum' is in kopecks → RUB
     return Math.round(n) / 100;
   } catch {
     return null;
