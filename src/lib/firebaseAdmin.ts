@@ -1,4 +1,4 @@
-// Lightweight firebase-admin shim for Vercel edge/node runtimes
+// firebase-admin shim with multiple named exports for legacy imports
 import type { ServiceAccount } from 'firebase-admin';
 import * as admin from 'firebase-admin';
 
@@ -14,7 +14,6 @@ function getCredFromEnv(): admin.credential.Credential | null {
       console.error('FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON parse error:', e);
     }
   }
-  // fallback to application default (rare on Vercel)
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     return admin.credential.applicationDefault();
   }
@@ -29,7 +28,6 @@ export function getAdminApp(): admin.app.App {
   if (cred) {
     app = admin.initializeApp({ credential: cred });
   } else {
-    // initialize without explicit credentials – will work for Firestore emulator or public access
     app = admin.initializeApp();
   }
   return app;
@@ -38,5 +36,8 @@ export function getAdminApp(): admin.app.App {
 export function getAdminDB(): FirebaseFirestore.Firestore {
   return getAdminApp().firestore();
 }
+
+// Back-compat named export expected by old code: `import { adminDb } from './firebaseAdmin'`
+export const adminDb = getAdminDB();
 
 export { admin };
