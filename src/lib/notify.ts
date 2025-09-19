@@ -14,11 +14,6 @@ export async function sendPhoto(chatId: string | number, photoUrl: string, capti
   await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      photo: photoUrl,
-      caption,
-      parse_mode: 'HTML',
-    }),
+    body: JSON.stringify({ chat_id: chatId, photo: photoUrl, caption, parse_mode: 'HTML' }),
   }).catch(() => {});
 }
