@@ -1,45 +1,42 @@
+// Lightweight firebase-admin shim for Vercel edge/node runtimes
+import type { ServiceAccount } from 'firebase-admin';
 import * as admin from 'firebase-admin';
 
-let _initialized = false;
+let app: admin.app.App | null = null;
 
-function loadServiceAccount(): admin.ServiceAccount {
-  // Prefer base64 to avoid PEM newline issues in Vercel UI
-  const b64 = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_B64;
-  const raw = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON;
+function getCredFromEnv(): admin.credential.Credential | null {
+  const json = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON;
+  if (json) {
+    try {
+      const parsed = JSON.parse(json) as ServiceAccount;
+      return admin.credential.cert(parsed);
+    } catch (e) {
+      console.error('FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON parse error:', e);
+    }
+  }
+  // fallback to application default (rare on Vercel)
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    return admin.credential.applicationDefault();
+  }
+  return null;
+}
 
-  let obj: any;
-  if (b64) {
-    const json = Buffer.from(b64, 'base64').toString('utf8');
-    obj = JSON.parse(json);
-  } else if (raw) {
-    obj = JSON.parse(raw);
+export function getAdminApp(): admin.app.App {
+  if (app) return app;
+  const existing = admin.apps?.[0];
+  if (existing) { app = existing; return app; }
+  const cred = getCredFromEnv();
+  if (cred) {
+    app = admin.initializeApp({ credential: cred });
   } else {
-    throw new Error('Missing FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON or FIREBASE_ADMIN_SERVICE_ACCOUNT_B64');
+    // initialize without explicit credentials – will work for Firestore emulator or public access
+    app = admin.initializeApp();
   }
-
-  // Normalize PEM newlines
-  if (obj.private_key && typeof obj.private_key === 'string') {
-    obj.private_key = obj.private_key.replace(/\\n/g, '\n');
-  }
-  return obj as admin.ServiceAccount;
+  return app;
 }
 
-export function ensureAdmin() {
-  if (_initialized) return;
-  if (!admin.apps.length) {
-    const sa = loadServiceAccount();
-    admin.initializeApp({
-      credential: admin.credential.cert(sa),
-      projectId: (sa as any).project_id,
-    });
-  }
-  _initialized = true;
+export function getAdminDB(): FirebaseFirestore.Firestore {
+  return getAdminApp().firestore();
 }
 
-export function getAdminDB() {
-  ensureAdmin();
-  return admin.firestore();
-}
-
-export const adminDb = getAdminDB();
 export { admin };

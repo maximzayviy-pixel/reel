@@ -1,23 +1,49 @@
+// Minimal helpers for Telegram WebApp initData parsing
 import { NextRequest } from 'next/server';
 
-/** Extract TG user id from 'x-telegram-init-data' header (no strict HMAC here) */
-export function getUserIdFromRequest(req: Request | NextRequest): string | null {
-  try {
-    const init = (req.headers as any).get ? (req as any).headers.get('x-telegram-init-data') : (req as any).headers['x-telegram-init-data'];
-    if (!init) return null;
-    const p = new URLSearchParams(init);
-    const raw = p.get('user');
-    const u = raw ? JSON.parse(raw) : null;
-    return u?.id ? String(u.id) : null;
-  } catch {
-    return null;
-  }
+function parseInitData(str: string): Record<string, any> {
+  const params = new URLSearchParams(str);
+  const userStr = params.get('user');
+  let user: any = null;
+  try { if (userStr) user = JSON.parse(userStr); } catch {}
+  return { user, params };
 }
 
-/** Is the requester one of admins defined in ENV TELEGRAM_ADMIN_USER_IDS */
-export function isAdminRequest(req: Request | NextRequest): boolean {
-  const uid = getUserIdFromRequest(req);
-  if (!uid) return false;
-  const list = (process.env.TELEGRAM_ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
-  return list.includes(uid);
+/**
+ * Reads Telegram user id from request:
+ * - header 'x-telegram-init-data' (set by your proxy / client fetch)
+ * - cookie 'tma_initData' (Telegram Mini App SDK puts it on client, you can forward it)
+ * - query string 'initData' (debug fallback)
+ */
+export function getUserIdFromRequest(req: Request | NextRequest): number | null {
+  try {
+    // headers
+    const header = (req.headers as any).get?.('x-telegram-init-data') || (req as any).headers?.['x-telegram-init-data'];
+    if (header) {
+      const { user } = parseInitData(header as string);
+      if (user?.id) return Number(user.id);
+    }
+  } catch {}
+
+  // cookies (NextRequest has cookies())
+  try {
+    const anyReq: any = req as any;
+    const cookieVal = anyReq?.cookies?.get?.('tma_initData')?.value || anyReq?.cookies?.get?.('initData')?.value;
+    if (cookieVal) {
+      const { user } = parseInitData(cookieVal as string);
+      if (user?.id) return Number(user.id);
+    }
+  } catch {}
+
+  // query
+  try {
+    const url = new URL((req as any).url);
+    const initData = url.searchParams.get('initData');
+    if (initData) {
+      const { user } = parseInitData(initData);
+      if (user?.id) return Number(user.id);
+    }
+  } catch {}
+
+  return null;
 }
