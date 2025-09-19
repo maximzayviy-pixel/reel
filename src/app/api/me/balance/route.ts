@@ -5,76 +5,70 @@ import { getAdminDB } from '../../../../lib/firebaseAdmin';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/**
- * GET /api/me/balance[?refresh=1&debug=1]
- * Canonical: balances/<userId> { stars, ton }
- * Fallbacks: users/<id>/wallet/balances, users/<id>/кошелек/(остатки|балансы)
- * If canonical exists but is zeroed and ?refresh=1, we re-read fallbacks and overwrite.
- */
+function toNum(val: any): number {
+  if (typeof val === 'number' && Number.isFinite(val)) return val;
+  if (typeof val === 'string') {
+    const n = Number(val.replace(',', '.'));
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
+}
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const refresh = url.searchParams.get('refresh') === '1';
-  const debug = url.searchParams.get('debug') === '1';
+  const refresh = url.searchParams.get('refresh') === '1' || url.searchParams.get('force') === '1';
 
   const userId = String(getUserIdFromRequest(req as unknown as Request) || '');
   if (!userId) return NextResponse.json({ error: 'no_user' }, { status: 400 });
 
   const db = getAdminDB();
-  const balRef = db.collection('balances').doc(userId);
-  const snap = await balRef.get();
+  const canonical = db.collection('balances').doc(userId);
 
-  const pickNum = (obj: any, keys: string[]) => {
-    for (const k of keys) if (obj && typeof obj[k] === 'number') return Number(obj[k]);
-    return 0;
+  const readCanon = async () => {
+    const s = await canonical.get();
+    if (!s.exists) return null as any;
+    const d = s.data() as any;
+    return { stars: toNum(d?.stars), ton: toNum(d?.ton), source: 'balances' };
   };
 
-  // Helper to read from alternate locations
-  const readFallback = async (): Promise<{stars:number, ton:number, src?:string} | null> => {
-    // english path
+  const readFallback = async () => {
+    // EN path
     try {
-      const en = await db.collection('users').doc(userId).collection('wallet').doc('balances').get();
-      if (en.exists) {
-        const d = en.data() as any;
-        return { stars: pickNum(d, ['stars','звезды','звезд']), ton: pickNum(d, ['ton','тонна']), src: 'users/wallet/balances' };
+      const s = await db.collection('users').doc(userId).collection('wallet').doc('balances').get();
+      if (s.exists) {
+        const d = s.data() as any;
+        return { stars: toNum(d?.stars ?? d?.['звезды'] ?? d?.['звезд']), ton: toNum(d?.ton ?? d?.['тонна']), source: 'users/wallet/balances' };
       }
     } catch {}
-    // russian paths
-    try {
-      for (const name of ['остатки','балансы']) {
-        const ru = await db.collection('users').doc(userId).collection('кошелек').doc(name).get();
-        if (ru.exists) {
-          const d = ru.data() as any;
-          return { stars: pickNum(d, ['stars','звезды','звезд']), ton: pickNum(d, ['ton','тонна']), src: `users/кошелек/${name}` };
+    // RU paths
+    for (const name of ['остатки','балансы']) {
+      try {
+        const s = await db.collection('users').doc(userId).collection('кошелек').doc(name).get();
+        if (s.exists) {
+          const d = s.data() as any;
+          return { stars: toNum(d?.stars ?? d?.['звезды'] ?? d?.['звезд']), ton: toNum(d?.ton ?? d?.['тонна']), source: `users/кошелек/${name}` };
         }
-      }
-    } catch {}
+      } catch {}
+    }
     return null;
   };
 
-  // If canonical exists and not refresh, return it
-  if (snap.exists && !refresh) {
-    const d = snap.data() as any;
-    const stars = Number(d?.stars ?? 0);
-    const ton = Number(d?.ton ?? 0);
-    // If it's non-zero, return immediately
-    if (stars > 0 || ton > 0) return NextResponse.json({ stars, ton, source: 'balances' });
-    // If zero but not refreshing, still try 1 quick fallback read once
-    const fb = await readFallback();
-    if (fb && (fb.stars > 0 || fb.ton > 0)) {
-      await balRef.set({ stars: fb.stars, ton: fb.ton }, { merge: true });
-      return NextResponse.json({ stars: fb.stars, ton: fb.ton, source: fb.src || 'fallback' });
+  // Read canonical first (unless force refresh)
+  if (!refresh) {
+    const can = await readCanon();
+    if (can && (can.stars > 0 || can.ton > 0)) {
+      return NextResponse.json({ uid: userId, ...can });
     }
-    return NextResponse.json({ stars, ton, source: debug ? 'balances_zero' : 'balances' });
   }
 
-  // Canonical missing OR refresh requested → consolidate from fallbacks
+  // Fallbacks
   const fb = await readFallback();
   if (fb) {
-    await balRef.set({ stars: fb.stars, ton: fb.ton }, { merge: true });
-    return NextResponse.json({ stars: fb.stars, ton: fb.ton, source: fb.src || 'fallback' });
+    await canonical.set({ stars: fb.stars, ton: fb.ton }, { merge: true });
+    return NextResponse.json({ uid: userId, ...fb });
   }
 
-  // Nothing anywhere → initialize
-  await balRef.set({ stars: 0, ton: 0 }, { merge: true });
-  return NextResponse.json({ stars: 0, ton: 0, source: 'created' });
+  // Canonical exists but zero or nothing found → zero init
+  await canonical.set({ stars: 0, ton: 0 }, { merge: true });
+  return NextResponse.json({ uid: userId, stars: 0, ton: 0, source: 'created' });
 }
