@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
+import { useRealtimeBalance } from '../../hooks/useRealtimeBalance';
 
 export default function BalanceText() {
   const { balance, loading, error } = useRealtimeBalance();
