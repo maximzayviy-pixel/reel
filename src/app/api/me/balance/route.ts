@@ -5,6 +5,9 @@ import { getAdminDB } from '../../../../lib/firebaseAdmin';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const STARS_PER_RUB = Number(process.env.STARS_PER_RUB || 2);
+const TON_RATE_RUB = Number(process.env.TON_RATE_RUB || 350);
+
 function toNum(val: any): number {
   if (typeof val === 'number' && Number.isFinite(val)) return val;
   if (typeof val === 'string') {
@@ -17,6 +20,7 @@ function toNum(val: any): number {
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const refresh = url.searchParams.get('refresh') === '1' || url.searchParams.get('force') === '1';
+  const debug = url.searchParams.get('debug') === '1';
 
   const userId = String(getUserIdFromRequest(req as unknown as Request) || '');
   if (!userId) return NextResponse.json({ error: 'no_user' }, { status: 400 });
@@ -53,22 +57,36 @@ export async function GET(req: NextRequest) {
     return null;
   };
 
-  // Read canonical first (unless force refresh)
+  let result = null as null | {stars:number, ton:number, source:string};
   if (!refresh) {
     const can = await readCanon();
-    if (can && (can.stars > 0 || can.ton > 0)) {
-      return NextResponse.json({ uid: userId, ...can });
+    if (can) result = can;
+  }
+  if (!result || (result.stars === 0 && result.ton === 0)) {
+    const fb = await readFallback();
+    if (fb) {
+      await canonical.set({ stars: fb.stars, ton: fb.ton }, { merge: true });
+      result = fb;
     }
   }
-
-  // Fallbacks
-  const fb = await readFallback();
-  if (fb) {
-    await canonical.set({ stars: fb.stars, ton: fb.ton }, { merge: true });
-    return NextResponse.json({ uid: userId, ...fb });
+  if (!result) {
+    result = { stars: 0, ton: 0, source: 'created' };
+    await canonical.set({ stars: 0, ton: 0 }, { merge: true });
   }
 
-  // Canonical exists but zero or nothing found → zero init
-  await canonical.set({ stars: 0, ton: 0 }, { merge: true });
-  return NextResponse.json({ uid: userId, stars: 0, ton: 0, source: 'created' });
+  const rubFromStars = result.stars / STARS_PER_RUB;
+  const rubFromTon = result.ton * TON_RATE_RUB;
+  const total_rub = Math.round((rubFromStars + rubFromTon) * 100) / 100;
+
+  // также обновим users/<id>/wallet/balances зеркалом и total_rub
+  try {
+    await db.collection('users').doc(userId).collection('wallet').doc('balances').set(
+      { stars: result.stars, ton: result.ton, total_rub },
+      { merge: true }
+    );
+  } catch {}
+
+  const payload:any = { uid: userId, stars: result.stars, ton: result.ton, total_rub };
+  if (debug) payload.source = result.source;
+  return NextResponse.json(payload);
 }
