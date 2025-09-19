@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDB } from '../../../../../lib/firebaseAdmin';
-import { getUserIdFromRequest } from '../../../../../lib/telegram';
+import { getAdminDB } from '@/lib/firebaseAdmin';
+import { getUserIdFromRequest } from '@/lib/telegram';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,9 +23,6 @@ async function readFromPaths(db: FirebaseFirestore.Firestore, tgid: string) {
 
   const c = await db.doc(`users/${tgid}/кошелек/остатки`).get().catch(() => null);
   if (c && c.exists) return c.data() as any;
-
-  const d = await db.doc(`users/${tgid}/кошелек/ост` ).get().catch(() => null);
-  if (d && d.exists) return d.data() as any;
 
   return null;
 }
@@ -67,9 +64,6 @@ export async function GET(req: NextRequest) {
   await db.doc(`balances/${tgid}`).set(payload, { merge: true });
 
   return NextResponse.json(payload, {
-    headers: {
-      // чтобы мини-апп не кэшировало
-      'Cache-Control': 'no-store',
-    },
+    headers: { 'Cache-Control': 'no-store' },
   });
 }
