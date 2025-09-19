@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import QRAmount from '@/components/QRAmount';
+import QRAmount from '../../components/QRAmount';
 
 type SbpOrder = {
   ok: boolean;
@@ -36,7 +36,6 @@ export default function TopupPage() {
     }
   }
 
-  // вытащим sum из ссылки (для бэкапа показа)
   const sumParam = React.useMemo(() => {
     try {
       const url = new URL(link);
