@@ -1,79 +1,88 @@
-export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDB } from '../../../../lib/firebaseAdmin';
-import { getUserIdFromRequest } from '../../../../lib/telegram';
-import { sendPhoto, sendMessage } from '../../../../lib/notify';
+import { getUserIdFromRequest } from '../../../lib/telegram';
+import { getAdminDB } from '../../../lib/firebaseAdmin';
 
-function getRates() {
-  const ton = Number(process.env.TON_RATE_RUB || 350);
-  const starsPerRub = Number(process.env.STARS_PER_RUB || 2);
-  return { ton, starsPerRub };
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function parseNspkSum(qrUrl: string): number | null {
+  try {
+    const url = new URL(qrUrl);
+    const raw = url.searchParams.get('sum');
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    // NSPK 'sum' передаётся в копейках => рубли = /100
+    return Math.round(n) / 100;
+  } catch {
+    return null;
+  }
 }
 
-/**
- * Создать заявку на оплату СБП: пользователь платит с баланса (stars/ton),
- * а админ проводит оплату по QR и подтверждает в админке.
- * Body: { rub: number, payWith: 'stars' | 'ton', qrUrl: string, comment?: string }
- */
+async function notifyAdmins(text: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const ids = (process.env.TELEGRAM_ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!token || ids.length === 0) return;
+  for (const id of ids) {
+    try {
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ chat_id: id, text, parse_mode: 'HTML', disable_web_page_preview: false }),
+      });
+    } catch {}
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { rub, payWith, qrUrl, comment } = await req.json();
-    const userId = getUserIdFromRequest(req as unknown as Request);
-    if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-    const rubN = Number(rub);
-    if (!rubN || rubN < 1) return NextResponse.json({ error: 'bad_amount' }, { status: 400 });
-    if (payWith !== 'stars' && payWith !== 'ton') return NextResponse.json({ error: 'bad_currency' }, { status: 400 });
-    if (!qrUrl || typeof qrUrl !== 'string') return NextResponse.json({ error: 'bad_qr' }, { status: 400 });
+    const userId = String(getUserIdFromRequest(req as unknown as Request) || '');
+    if (!userId) return NextResponse.json({ error: 'no_user' }, { status: 400 });
 
-    const rates = getRates();
-    const adminDb = getAdminDB();
+    const body = await req.json().catch(() => ({}));
+    const qrUrl = String(body?.qrUrl || body?.link || '');
+    const comment = typeof body?.comment === 'string' ? body.comment : undefined;
+    if (!qrUrl) return NextResponse.json({ error: 'no_qr' }, { status: 400 });
 
-    // read user balance
-    const balRef = adminDb.doc(`balances/${userId}`);
-    const balSnap = await balRef.get();
-    const bal = (balSnap.exists ? (balSnap.data() as any) : {}) || {};
-    const needStars = payWith === 'stars' ? Math.ceil(rubN * (rates.starsPerRub || 2)) : 0;
-    const needTon = payWith === 'ton' ? (rubN / (rates.ton || 350)) : 0;
+    const rub = parseNspkSum(qrUrl);
+    if (rub === null) return NextResponse.json({ error: 'bad_qr_sum' }, { status: 400 });
 
-    if (payWith === 'stars' && (Number(bal.stars || 0) < needStars)) {
-      return NextResponse.json({ error: 'insufficient_stars' }, { status: 400 });
-    }
-    if (payWith === 'ton' && (Number(bal.ton || 0) < needTon)) {
-      return NextResponse.json({ error: 'insufficient_ton' }, { status: 400 });
-    }
+    const starsPerRub = Number(process.env.STARS_PER_RUB || 2);
+    const tonRateRub = Number(process.env.TON_RATE_RUB || 350);
 
-    // create payment doc (pending, no deduction yet)
-    const ref = adminDb.collection('payments').doc();
-    const doc = {
-      id: ref.id,
-      type: 'sbp',
-      status: 'pending', // pending -> confirmed/rejected
-      user_id: String(userId),
-      rub: rubN,
-      pay_with: payWith,
-      cost_stars: needStars,
-      cost_ton: needTon,
+    const cost_stars = Math.ceil(rub * starsPerRub);
+    const cost_ton = Number((rub / tonRateRub).toFixed(6));
+
+    const db = getAdminDB();
+    const ref = await db.collection('payments').add({
+      user_id: userId,
+      method: 'sbp',
+      status: 'pending',
+      rub,
+      cost_stars,
+      cost_ton,
       qr_url: qrUrl,
-      comment: comment || '',
+      comment: comment || null,
       created_at: Date.now(),
-    };
-    await ref.set(doc);
+    });
 
-    // notify admins with photo
-    const admins = (process.env.TELEGRAM_ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
-    const cap = [
-      `🧾 Заявка на оплату СБП #${ref.id}`,
-      `Пользователь: ${userId}`,
-      `Сумма: ${rubN} ₽`,
-      payWith === 'stars' ? `Списать: ${needStars}⭐` : `Списать: ${needTon.toFixed(4)} TON`,
+    const text = [
+      `<b>Новая заявка СБП</b>`,
+      `id: <code>${ref.id}</code>`,
+      `user: <code>${userId}</code>`,
+      `Сумма: <b>${rub} ₽</b>`,
+      `⭐ к списанию: <b>${cost_stars}</b>`,
+      `TON к списанию: <b>${cost_ton}</b>`,
       comment ? `Комментарий: ${comment}` : null,
-      '',
-      'Подтверди или отклони в админке.'
+      ``,
+      `Ссылка СБП:`,
+      qrUrl,
     ].filter(Boolean).join('\n');
-    for (const a of admins) await sendPhoto(a, qrUrl, cap);
 
-    return NextResponse.json({ ok: true, paymentId: ref.id });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'server_error' }, { status: 500 });
+    await notifyAdmins(text);
+
+    return NextResponse.json({ ok: true, id: ref.id, rub, cost_stars, cost_ton });
+  } catch (e) {
+    return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }
 }
