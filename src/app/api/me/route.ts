@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserIdFromRequest, isAdminRequest } from '../../lib/telegram';
+import { getUserIdFromRequest, isAdminRequest } from '../../../lib/telegram';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
