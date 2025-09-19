@@ -1,92 +1,75 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserIdFromRequest } from '../../../../lib/telegram';
-import { getAdminDB } from '../../../../lib/firebaseAdmin';
+import { getAdminDB } from '../../../../../lib/firebaseAdmin';
+import { getUserIdFromRequest } from '../../../../../lib/telegram';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const STARS_PER_RUB = Number(process.env.STARS_PER_RUB || 2);
-const TON_RATE_RUB = Number(process.env.TON_RATE_RUB || 350);
+type Bal = { stars: number; ton: number; total_rub?: number };
 
-function toNum(val: any): number {
-  if (typeof val === 'number' && Number.isFinite(val)) return val;
-  if (typeof val === 'string') {
-    const n = Number(val.replace(',', '.'));
-    if (Number.isFinite(n)) return n;
-  }
-  return 0;
+function num(x: any, d = 0): number {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : d;
+}
+
+async function readFromPaths(db: FirebaseFirestore.Firestore, tgid: string) {
+  // canonical en
+  const a = await db.doc(`users/${tgid}/wallet/balances`).get();
+  if (a.exists) return a.data() as any;
+
+  // ru variants
+  const b = await db.doc(`users/${tgid}/кошелек/балансы`).get().catch(() => null);
+  if (b && b.exists) return b.data() as any;
+
+  const c = await db.doc(`users/${tgid}/кошелек/остатки`).get().catch(() => null);
+  if (c && c.exists) return c.data() as any;
+
+  const d = await db.doc(`users/${tgid}/кошелек/ост` ).get().catch(() => null);
+  if (d && d.exists) return d.data() as any;
+
+  return null;
 }
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
-  const refresh = url.searchParams.get('refresh') === '1' || url.searchParams.get('force') === '1';
-  const debug = url.searchParams.get('debug') === '1';
-
-  const userId = String(getUserIdFromRequest(req as unknown as Request) || '');
-  if (!userId) return NextResponse.json({ error: 'no_user' }, { status: 400 });
+  // Берём именно telegram id из initData
+  const tgid = String(getUserIdFromRequest(req as unknown as Request) || '');
+  if (!tgid) return NextResponse.json({ error: 'no_telegram_initdata' }, { status: 400 });
 
   const db = getAdminDB();
-  const canonical = db.collection('balances').doc(userId);
+  const url = new URL(req.url);
+  const refresh = url.searchParams.get('refresh') === '1' || url.searchParams.get('refresh') === 'true';
 
-  const readCanon = async () => {
-    const s = await canonical.get();
-    if (!s.exists) return null as any;
-    const d = s.data() as any;
-    return { stars: toNum(d?.stars), ton: toNum(d?.ton), source: 'balances' };
-  };
-
-  const readFallback = async () => {
-    // EN path
-    try {
-      const s = await db.collection('users').doc(userId).collection('wallet').doc('balances').get();
-      if (s.exists) {
-        const d = s.data() as any;
-        return { stars: toNum(d?.stars ?? d?.['звезды'] ?? d?.['звезд']), ton: toNum(d?.ton ?? d?.['тонна']), source: 'users/wallet/balances' };
-      }
-    } catch {}
-    // RU paths
-    for (const name of ['остатки','балансы']) {
-      try {
-        const s = await db.collection('users').doc(userId).collection('кошелек').doc(name).get();
-        if (s.exists) {
-          const d = s.data() as any;
-          return { stars: toNum(d?.stars ?? d?.['звезды'] ?? d?.['звезд']), ton: toNum(d?.ton ?? d?.['тонна']), source: `users/кошелек/${name}` };
-        }
-      } catch {}
-    }
-    return null;
-  };
-
-  let result = null as null | {stars:number, ton:number, source:string};
-  if (!refresh) {
-    const can = await readCanon();
-    if (can) result = can;
+  let data: any = null;
+  if (refresh) {
+    data = await readFromPaths(db, tgid);
   }
-  if (!result || (result.stars === 0 && result.ton === 0)) {
-    const fb = await readFallback();
-    if (fb) {
-      await canonical.set({ stars: fb.stars, ton: fb.ton }, { merge: true });
-      result = fb;
+
+  // Если не попросили refresh — сначала смотрим кэш в canonical balances/<tgid>
+  if (!data) {
+    const cached = await db.doc(`balances/${tgid}`).get();
+    data = cached.exists ? cached.data() : null;
+    if (!data) {
+      // если кэша нет — ищем в юзерских путях
+      data = await readFromPaths(db, tgid);
     }
   }
-  if (!result) {
-    result = { stars: 0, ton: 0, source: 'created' };
-    await canonical.set({ stars: 0, ton: 0 }, { merge: true });
-  }
 
-  const rubFromStars = result.stars / STARS_PER_RUB;
-  const rubFromTon = result.ton * TON_RATE_RUB;
-  const total_rub = Math.round((rubFromStars + rubFromTon) * 100) / 100;
+  const stars = num(data?.stars, 0);
+  const ton = num(data?.ton, 0);
 
-  // также обновим users/<id>/wallet/balances зеркалом и total_rub
-  try {
-    await db.collection('users').doc(userId).collection('wallet').doc('balances').set(
-      { stars: result.stars, ton: result.ton, total_rub },
-      { merge: true }
-    );
-  } catch {}
+  const starsPerRub = num(process.env.STARS_PER_RUB, 2);
+  const tonRateRub = num(process.env.TON_RATE_RUB, 350);
+  const total_rub = Math.round((stars / starsPerRub + ton * tonRateRub) * 100) / 100;
 
-  const payload:any = { uid: userId, stars: result.stars, ton: result.ton, total_rub };
-  if (debug) payload.source = result.source;
-  return NextResponse.json(payload);
+  const payload: Bal & { uid: string } = { uid: tgid, stars, ton, total_rub };
+
+  // зеркало в canonical balances/<tgid>
+  await db.doc(`balances/${tgid}`).set(payload, { merge: true });
+
+  return NextResponse.json(payload, {
+    headers: {
+      // чтобы мини-апп не кэшировало
+      'Cache-Control': 'no-store',
+    },
+  });
 }
