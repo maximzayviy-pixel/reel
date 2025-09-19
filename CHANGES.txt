@@ -22,3 +22,5 @@ Migration advice:
 - Ensure ENV on Vercel: TELEGRAM_BOT_TOKEN, TELEGRAM_ADMIN_USER_IDS, FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON,
   STARS_PER_RUB, TON_RATE_RUB.
 - Deploy.
+
+Added /admin page and APIs: /api/me, /api/admin/sbp/list. Ensure TELEGRAM_ADMIN_USER_IDS set and initData header passed from Telegram WebApp.
