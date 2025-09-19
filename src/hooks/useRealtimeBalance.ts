@@ -1,35 +1,29 @@
-'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-export type Balance = { uid: string; stars: number; ton: number; total_rub?: number };
-
-export function useRealtimeBalance() {
-  const [data, setData] = useState<Balance | null>(null);
+export function useRealtimeBalance(userId?: string | number) {
+  const [balance, setBalance] = useState<{ stars: number; rub: number }>({ stars: 0, rub: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(refresh=false) {
+  async function fetchBalance(refresh = false) {
     try {
-      const res = await fetch(`/api/me/balance${refresh ? '?refresh=1' : ''}`, {
-        method: 'GET',
-        headers: { 'cache-control': 'no-cache' },
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'balance_error');
-      setData(j);
-      setError(null);
+      setLoading(true);
+      const res = await fetch(`/api/me/balance${refresh ? '?refresh=1' : ''}`);
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setBalance({ stars: data.stars || 0, rub: data.rub || 0 });
     } catch (e: any) {
-      setError(e?.message || 'balance_error');
+      setError(e.message);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    load(true);
-    const id = setInterval(() => load(false), 5000);
-    return () => clearInterval(id);
-  }, []);
+    fetchBalance();
+    const interval = setInterval(() => fetchBalance(true), 10000);
+    return () => clearInterval(interval);
+  }, [userId]);
 
-  return { balance: data, loading, error, refresh: () => load(true) };
+  return { balance, loading, error, refresh: () => fetchBalance(true) };
 }

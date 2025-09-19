@@ -1,18 +1,17 @@
 'use client';
 import React from 'react';
-import { useRealtimeBalance } from '../hooks/useRealtimeBalance';
+import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
 
-export default function BalanceText() {
-  const { balance, loading, error } = useRealtimeBalance();
+export default function BalanceText({ userId }: { userId?: string | number }) {
+  const { balance, loading, error } = useRealtimeBalance(userId);
 
-  if (loading) return <span>…</span>;
-  if (error) return <span className="text-red-600">ошибка</span>;
-  if (!balance) return <span>0</span>;
+  if (loading) return <span>Загрузка...</span>;
+  if (error) return <span>Ошибка: {error}</span>;
 
-  const fmt = new Intl.NumberFormat('ru-RU');
   return (
-    <span>
-      ⭐ {fmt.format(balance.stars)} · ₽ {fmt.format(Math.round((balance.total_rub || 0) * 100) / 100)}
-    </span>
+    <div className="flex flex-col items-center">
+      <span className="text-lg font-semibold">⭐ {balance.stars}</span>
+      <span className="text-lg font-semibold">₽ {balance.rub}</span>
+    </div>
   );
 }
