@@ -1,10 +1,11 @@
 'use client';
 import React from 'react';
+import QRAmount from '@/components/QRAmount';
 
 type SbpOrder = {
   ok: boolean;
   id: string;
-  rub: number;         // <-- уже в РУБЛЯХ, а не копейках
+  rub: number;         // уже в рублях
   cost_stars: number;
   cost_ton: number;
 };
@@ -35,8 +36,19 @@ export default function TopupPage() {
     }
   }
 
+  // вытащим sum из ссылки (для бэкапа показа)
+  const sumParam = React.useMemo(() => {
+    try {
+      const url = new URL(link);
+      return url.searchParams.get('sum') || undefined;
+    } catch { return undefined; }
+  }, [link]);
+
   return (
     <div className="max-w-xl mx-auto p-5 pb-24">
+      <div className="mb-4">
+        <a href="/" className="text-blue-500 hover:underline">Назад</a>
+      </div>
       <h1 className="text-3xl font-semibold mb-5">Пополнение</h1>
 
       <div className="mb-4">
@@ -59,29 +71,18 @@ export default function TopupPage() {
 
       {err && <p className="mt-3 text-red-600">Ошибка: {err}</p>}
 
-      {order && (
-        <div className="mt-6 rounded-2xl border p-4 space-y-3">
-          <p className="text-green-700">Отправлено админу. Выберите способ оплаты:</p>
-          <div className="flex items-center justify-between gap-3 text-lg">
-            <div>RUB: <b>{order.rub}</b></div> {/* ВАЖНО: показываем rub из ответа API */}
+      <div className="mt-6 rounded-2xl border p-4 space-y-3">
+        <div className="text-sm opacity-70">Сумма к оплате (рубли):</div>
+        <div className="text-2xl font-semibold">
+          <QRAmount rub={order?.rub} sumParam={sumParam} />
+        </div>
+        {order && (
+          <div className="flex items-center justify-between gap-3 text-lg pt-2">
             <div>⭐: <b>{order.cost_stars}</b></div>
             <div>TON: <b>{order.cost_ton}</b></div>
           </div>
-
-          <div className="flex gap-3 mt-2">
-            <button className="flex-1 rounded-xl py-3 font-semibold text-white bg-blue-600">
-              Оплатить ⭐
-            </button>
-            <button className="flex-1 rounded-xl py-3 font-semibold text-white bg-blue-600">
-              Оплатить TON
-            </button>
-          </div>
-
-          <p className="text-xs opacity-70">
-            Для звёзд оплата происходит внутри Telegram. Для TON откроется платёжная страница.
-          </p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
